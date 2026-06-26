@@ -2,6 +2,23 @@
 
 [![Get it on Google Play](http://www.tananaev.com/badges/google-play.svg)](https://play.google.com/store/apps/details?id=org.traccar.client) [![Download on the App Store](http://www.tananaev.com/badges/app-store.svg)](https://itunes.apple.com/app/traccar-client/id843156974)
 
+> ## ⚠️ Fork Notice
+>
+> This repository (`NexembleAI/nexapp`) is a **fork of [`traccar/traccar-client`](https://github.com/traccar/traccar-client)** that has been **detached from the original parent**. It is now a standalone repository under the NexembleAI organization.
+>
+> **Pull requests** stay within `NexembleAI/nexapp` and do **not** target the upstream traccar repository.
+>
+> **Syncing with upstream:** because the fork relationship has been removed, there is no "Sync fork" button. To pull updates from the original project, add it as a remote and merge manually:
+>
+> ```bash
+> # Add the original repository as an upstream remote (one-time setup)
+> git remote add upstream https://github.com/traccar/traccar-client.git
+>
+> # Fetch and merge upstream changes
+> git fetch upstream
+> git merge upstream/main   # upstream's default branch
+> ```
+
 ## Overview
 
 Traccar Client is a GPS tracking app for Android and iOS. It runs in the background and sends location updates to your own server using the open-source Traccar platform.
