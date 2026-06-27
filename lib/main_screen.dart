@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:traccar_client/main.dart';
@@ -81,7 +80,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               onChanged: (bool value) async {
                 if (await PasswordService.authenticate(context) && mounted) {
                   if (value) {
-                    FirebaseCrashlytics.instance.log('tracking_toggle_start');
                     var started = false;
                     try {
                       await GeolocationService.tracker.start();
@@ -100,7 +98,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     }
                     setState(() => trackingEnabled = started);
                   } else {
-                    FirebaseCrashlytics.instance.log('tracking_toggle_stop');
                     await GeolocationService.tracker.stop();
                     if (mounted) setState(() => trackingEnabled = false);
                   }
@@ -133,38 +130,17 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   Widget _buildSettingsCard() {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(AppLocalizations.of(context)!.settingsTitle),
-              titleTextStyle: Theme.of(context).textTheme.headlineMedium,
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(AppLocalizations.of(context)!.urlLabel),
-              subtitle: Text(Preferences.instance.getString(Preferences.url) ?? ''),
-            ),
-            const SizedBox(height: 8),
-            OverflowBar(
-              spacing: 8,
-              children: [
-                FilledButton.tonal(
-                  onPressed: () async {
-                    if (await PasswordService.authenticate(context) && mounted) {
-                      await Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
-                      setState(() {});
-                    }
-                  },
-                  child: Text(AppLocalizations.of(context)!.settingsButton),
-                ),
-              ],
-            ),
-          ]
-        ),
+      child: ListTile(
+        leading: const Icon(Icons.settings_outlined),
+        title: Text(AppLocalizations.of(context)!.settingsTitle),
+        subtitle: Text(AppLocalizations.of(context)!.settingsSubtitle),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () async {
+          if (await PasswordService.authenticate(context) && mounted) {
+            await Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+            setState(() {});
+          }
+        },
       ),
     );
   }
@@ -173,7 +149,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Traccar Client'),
+        title: const Text('Nexapp'),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),

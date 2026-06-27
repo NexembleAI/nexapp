@@ -16,16 +16,10 @@ dependencies:
   shared_preferences: ^2.5.5
   firebase_core: ^4.9.0
   firebase_messaging: ^16.2.2
-  firebase_analytics: ^12.4.1
-  firebase_crashlytics: ^5.2.2
   quick_actions: ^1.1.0
-  rate_my_app: ^2.4.0
   shared_preferences_android: ^2.4.23
-  mobile_scanner: ^7.2.0
   flutter_secure_storage: ^10.2.0
   app_links: ^7.0.0
-  app_settings: ^7.0.0
-  share_plus: ^13.1.0
 
 dev_dependencies:
   flutter_test:
@@ -36,3 +30,9 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   generate: true
+
+flutter_launcher_icons:
+  ios: true
+  android: "ic_launcher"
+  image_path: "assets/icon/icon.png"
+  remove_alpha_ios: true
