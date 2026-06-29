@@ -40,6 +40,9 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Custom-scheme redirect captured by flutter_appauth's RedirectUriReceiverActivity
+        // (the OIDC redirect URI is com.nexemble.nexapp:/callback).
+        manifestPlaceholders["appAuthRedirectScheme"] = "com.nexemble.nexapp"
     }
 
     signingConfigs {

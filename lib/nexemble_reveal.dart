@@ -8,7 +8,7 @@ const Color kNexembleBlue = Color(0xFF2328A0);
 
 /// The full Nexemble cube (the four brand pieces) in blue, viewBox cropped
 /// tightly around the mark so it fills the frame.
-const String _cubeSvg =
+const String kNexembleCubeSvg =
     '<svg viewBox="34 36 32 32" xmlns="http://www.w3.org/2000/svg">'
     '<g transform="translate(50 52) scale(0.011) translate(-21895 -1320)" fill="#2328A0">'
     '<path d="M20895 1961.14V1219.43L21305.1 1496V2225.14L20895 1961.14Z"/>'
@@ -102,7 +102,7 @@ class _NexembleRevealState extends State<NexembleReveal>
   @override
   void initState() {
     super.initState();
-    _cube = SvgPicture.string(_cubeSvg);
+    _cube = SvgPicture.string(kNexembleCubeSvg);
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 3600),

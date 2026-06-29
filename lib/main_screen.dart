@@ -6,6 +6,7 @@ import 'package:traccar_client/main.dart';
 import 'package:traccar_client/password_service.dart';
 import 'package:traccar_client/preferences.dart';
 
+import 'auth_service.dart';
 import 'geolocation_service.dart';
 import 'l10n/app_localizations.dart';
 import 'settings_screen.dart';
@@ -150,6 +151,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Nexapp'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Sign out',
+            onPressed: () => AuthService.instance.logout(),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),

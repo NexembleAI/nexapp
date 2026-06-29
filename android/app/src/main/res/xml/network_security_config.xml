@@ -4,6 +4,9 @@
         <trust-anchors>
             <certificates src="system" />
             <certificates src="user" />
+            <!-- Trust the internal mkcert CA so OIDC discovery / token calls to
+                 the Keycloak host validate normally (no trust-all). -->
+            <certificates src="@raw/nexemble_ca" />
         </trust-anchors>
     </base-config>
 </network-security-config>

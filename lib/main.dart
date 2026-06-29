@@ -7,9 +7,11 @@ import 'package:traccar_client/password_service.dart';
 import 'package:traccar_client/push_service.dart';
 import 'package:traccar_client/quick_actions.dart';
 
+import 'auth_service.dart';
 import 'configuration_service.dart';
 import 'geolocation_service.dart';
 import 'l10n/app_localizations.dart';
+import 'login_screen.dart';
 import 'main_screen.dart';
 import 'nexemble_reveal.dart';
 import 'preferences.dart';
@@ -24,6 +26,7 @@ void main() async {
   await GeolocationService.tracker.init(Preferences.buildConfig());
   await PasswordService.migrate();
   await PushService.init();
+  await AuthService.instance.restore();
   runApp(const MainApp());
 }
 
@@ -99,14 +102,31 @@ class _MainAppState extends State<MainApp> {
           brightness: Brightness.dark,
         ),
       ),
-      home: const RevealGate(
-        child: Stack(
+      home: const RevealGate(child: AuthGate()),
+    );
+  }
+}
+
+/// Shows the login screen when signed out and the app when signed in,
+/// driven by [AuthService.authState].
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool?>(
+      valueListenable: AuthService.instance.authState,
+      builder: (context, signedIn, _) {
+        if (signedIn != true) {
+          return const LoginScreen();
+        }
+        return const Stack(
           children: [
             QuickActionsInitializer(),
             MainScreen(),
           ],
-        ),
-      ),
+        );
+      },
     );
   }
 }
