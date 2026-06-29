@@ -32,6 +32,8 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>org.traccar.client</string>
+				<!-- OIDC redirect scheme (redirect URI: com.nexemble.nexapp:/callback) -->
+				<string>com.nexemble.nexapp</string>
 			</array>
 		</dict>
 	</array>
