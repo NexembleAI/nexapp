@@ -20,6 +20,7 @@ dependencies:
   shared_preferences_android: ^2.4.23
   flutter_secure_storage: ^10.2.0
   app_links: ^7.0.0
+  flutter_svg: ^2.0.17
 
 dev_dependencies:
   flutter_test:

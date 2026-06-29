@@ -122,8 +122,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/traccar/traccar-client-sdk.git",
       "state" : {
-        "revision" : "bed3d1640b7bfa745ae63eca7cffa61c0c397990",
-        "version" : "0.0.24"
+        "revision" : "78045c82afa8fb0f954740483a2d792c55d9d1df",
+        "version" : "0.0.25"
       }
     }
   ],
