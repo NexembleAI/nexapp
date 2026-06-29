@@ -2,9 +2,12 @@
 <resources>
     <!-- Theme applied to the Android Window while the process is starting when the OS's Dark Mode setting is off -->
     <style name="LaunchTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
-        <!-- Show a splash screen on the activity. Automatically removed when
-             the Flutter engine draws its first frame -->
-        <item name="android:windowBackground">?android:colorBackground</item>
+        <!-- Nexemble branded launch: blue background with the white cube,
+             matching the in-app reveal. Automatically removed when the
+             Flutter engine draws its first frame. -->
+        <item name="android:windowBackground">@color/nexembleSplashBackground</item>
+        <item name="android:windowSplashScreenBackground">@color/nexembleSplashBackground</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_cube</item>
     </style>
     <!-- Theme applied to the Android Window as soon as the process has started.
          This theme determines the color of the Android Window while your
@@ -13,6 +16,6 @@
 
          This Theme is only used starting with V2 of Flutter's Android embedding. -->
     <style name="NormalTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">?android:colorBackground</item>
+        <item name="android:windowBackground">@color/nexembleSplashBackground</item>
     </style>
 </resources>

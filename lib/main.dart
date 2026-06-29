@@ -11,6 +11,7 @@ import 'configuration_service.dart';
 import 'geolocation_service.dart';
 import 'l10n/app_localizations.dart';
 import 'main_screen.dart';
+import 'nexemble_reveal.dart';
 import 'preferences.dart';
 
 final messengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -98,11 +99,13 @@ class _MainAppState extends State<MainApp> {
           brightness: Brightness.dark,
         ),
       ),
-      home: Stack(
-        children: const [
-          QuickActionsInitializer(),
-          MainScreen(),
-        ],
+      home: const RevealGate(
+        child: Stack(
+          children: [
+            QuickActionsInitializer(),
+            MainScreen(),
+          ],
+        ),
       ),
     );
   }

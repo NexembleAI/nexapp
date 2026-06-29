@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Blue Nexemble cube for the Android 12+ splash screen (shown on the light
+     windowSplashScreenBackground). Paths are the brand cube; the nested groups
+     scale/centre it within the 100x100 viewport. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+    <group android:translateX="50" android:translateY="50">
+        <group android:scaleX="0.03" android:scaleY="0.03">
+            <group android:translateX="-21895" android:translateY="-1320">
+                <path android:fillColor="#2328A0"
+                    android:pathData="M20895 1961.14V1219.43L21305.1 1496V2225.14L20895 1961.14Z" />
+                <path android:fillColor="#2328A0"
+                    android:pathData="M21683.6 2501.71V1332.57L20895 773.143V678.857L21197.8 484L22112.7 1131.43V2501.71L21917.1 2640L21683.6 2501.71Z" />
+                <path android:fillColor="#2328A0"
+                    android:pathData="M22895 1961.14L22503.8 2225.14H22478.6V898.857L21822.4 452.571L22213.6 207.429L22895 678.857V1961.14Z" />
+                <path android:fillColor="#2328A0"
+                    android:pathData="M21904.5 0L21525.9 245.143L21690 364.571L22074.8 119.429L21904.5 0Z" />
+            </group>
+        </group>
+    </group>
+</vector>
