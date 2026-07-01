@@ -12,6 +12,11 @@ class AuthConfig {
   static const String nexCoreUrl =
       String.fromEnvironment('NEX_CORE_URL', defaultValue: 'https://app.nexemble.local');
 
+  /// Nexcore tenant id, a path parameter on every `/v1/api/tenant/{id}/...`
+  /// call. It is **not** carried in the access token (the realm emits no tenant
+  /// claim), so it is hard-coded here.
+  static const String tenantId = '2';
+
   /// Public OIDC client registered in the `default` realm.
   static const String clientId =
       String.fromEnvironment('NEX_CLIENT_ID', defaultValue: 'mobile-app');
