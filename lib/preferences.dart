@@ -21,6 +21,9 @@ class Preferences {
   static const String stopDetection = 'stop_detection';
   static const String preferPlatformProviders = 'prefer_platform_providers';
   static const String password = 'password';
+  // Set true once the device has been auto-registered with the tracking service
+  // (post-login gate). Not part of the fresh-install defaults.
+  static const String deviceRegistered = 'device_registered';
 
   static Future<void> init() async {
     _initFuture ??= _createInstance();
@@ -34,7 +37,7 @@ class Preferences {
           : SharedPreferencesOptions(),
       cacheOptions: SharedPreferencesWithCacheOptions(
         allowList: {
-          id, url, accuracy, distance, interval, angle, heartbeat, buffer, wakelock, stopDetection, preferPlatformProviders, password,
+          id, url, accuracy, distance, interval, angle, heartbeat, buffer, wakelock, stopDetection, preferPlatformProviders, password, deviceRegistered,
         },
       ),
     );

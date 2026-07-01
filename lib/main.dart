@@ -15,6 +15,7 @@ import 'login_screen.dart';
 import 'main_screen.dart';
 import 'nexemble_reveal.dart';
 import 'preferences.dart';
+import 'registration_gate.dart';
 
 final messengerKey = GlobalKey<ScaffoldMessengerState>();
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -120,11 +121,13 @@ class AuthGate extends StatelessWidget {
         if (signedIn != true) {
           return const LoginScreen();
         }
-        return const Stack(
-          children: [
-            QuickActionsInitializer(),
-            MainScreen(),
-          ],
+        return const RegistrationGate(
+          child: Stack(
+            children: [
+              QuickActionsInitializer(),
+              MainScreen(),
+            ],
+          ),
         );
       },
     );
