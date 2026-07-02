@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_android/shared_preferences_android.dart';
 import 'package:traccar_client_sdk/traccar_client_sdk.dart';
 
+import 'auth_config.dart';
+
 class Preferences {
   static Future<void>? _initFuture;
   static late SharedPreferencesWithCache instance;
@@ -24,6 +26,9 @@ class Preferences {
   // Set true once the device has been auto-registered with the tracking service
   // (post-login gate). Not part of the fresh-install defaults.
   static const String deviceRegistered = 'device_registered';
+  // Last build-time NEX_TRACCAR_URL (AuthConfig.serverUrl) applied to `url`.
+  // Lets a new build whose define changed override the persisted `url`.
+  static const String urlConfig = 'url_config';
 
   static Future<void> init() async {
     _initFuture ??= _createInstance();
@@ -37,18 +42,25 @@ class Preferences {
           : SharedPreferencesOptions(),
       cacheOptions: SharedPreferencesWithCacheOptions(
         allowList: {
-          id, url, accuracy, distance, interval, angle, heartbeat, buffer, wakelock, stopDetection, preferPlatformProviders, password, deviceRegistered,
+          id, url, accuracy, distance, interval, angle, heartbeat, buffer, wakelock, stopDetection, preferPlatformProviders, password, deviceRegistered, urlConfig,
         },
       ),
     );
     if (instance.getString(id) == null) {
       await instance.setString(id, (Random().nextInt(90000000) + 10000000).toString());
-      await instance.setString(url, 'http://traccar.nexemble.local:5055');
       await instance.setString(accuracy, 'high');
       await instance.setInt(interval, 180);
       await instance.setInt(distance, 25);
       await instance.setBool(buffer, true);
       await instance.setBool(stopDetection, true);
+    }
+    // Seed `url` from the build-time NEX_TRACCAR_URL, and re-apply it whenever
+    // that define changes (covers fresh installs and upgrades to a build with a
+    // different endpoint). Within the same build the stored value is left alone,
+    // so a runtime/deep-link override survives. The SDK always reads `url`.
+    if (instance.getString(urlConfig) != AuthConfig.serverUrl) {
+      await instance.setString(url, AuthConfig.serverUrl);
+      await instance.setString(urlConfig, AuthConfig.serverUrl);
     }
   }
 

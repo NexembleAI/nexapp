@@ -17,6 +17,16 @@ class AuthConfig {
   /// claim), so it is hard-coded here.
   static const String tenantId = '2';
 
+  /// Traccar OsmAnd ingest endpoint the tracker SDK posts positions to.
+  /// Injected at build time; seeds the persisted `Preferences.url` and, on a
+  /// build where this value changes, overrides the stored one (see
+  /// Preferences._createInstance). Override with
+  /// `--dart-define=NEX_TRACCAR_URL=https://...`.
+  static const String serverUrl = String.fromEnvironment(
+    'NEX_TRACCAR_URL',
+    defaultValue: 'https://traccar.nexemble.local:5055',
+  );
+
   /// Public OIDC client registered in the `default` realm.
   static const String clientId =
       String.fromEnvironment('NEX_CLIENT_ID', defaultValue: 'mobile-app');

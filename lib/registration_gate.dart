@@ -29,7 +29,12 @@ class _RegistrationGateState extends State<RegistrationGate> {
   @override
   void initState() {
     super.initState();
-    if (!_ready) _register();
+    if (_ready) {
+      registerDebugLog('device already registered; skipping gate');
+    } else {
+      registerDebugLog('not registered; starting registration gate');
+      _register();
+    }
   }
 
   /// Max register attempts for a [RegisterOutcome.retryable] result
@@ -39,10 +44,12 @@ class _RegistrationGateState extends State<RegistrationGate> {
   Future<void> _register() async {
     var result = const RegisterResult(RegisterOutcome.retryable);
     for (var attempt = 1; attempt <= _maxAttempts; attempt++) {
+      registerDebugLog('attempt $attempt/$_maxAttempts');
       result = await TrackingService.registerDevice();
       if (result.outcome != RegisterOutcome.retryable) break;
       if (attempt < _maxAttempts) {
         // Linear backoff: 1s, then 2s.
+        registerDebugLog('retryable; backing off ${attempt}s before retry');
         await Future.delayed(Duration(seconds: attempt));
         if (!mounted) return;
       }
@@ -51,13 +58,16 @@ class _RegistrationGateState extends State<RegistrationGate> {
     if (!mounted) return;
 
     if (result.outcome == RegisterOutcome.success) {
+      registerDebugLog('success -> persist flag -> home');
       await Preferences.instance.setBool(Preferences.deviceRegistered, true);
     } else if (result.outcome == RegisterOutcome.unauthenticated) {
       // Token rejected / refresh failed — force re-authentication. AuthGate
       // then shows the login screen; don't fall through to the home app.
+      registerDebugLog('unauthenticated -> logout');
       await AuthService.instance.logout();
       return;
     } else {
+      registerDebugLog('${result.outcome.name} -> error dialog -> home');
       await _showErrorDialog(result.outcome);
     }
 

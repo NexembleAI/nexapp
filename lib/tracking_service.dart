@@ -4,11 +4,19 @@ import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
 import 'auth_config.dart';
 import 'auth_service.dart';
 import 'preferences.dart';
+
+/// Debug-only logger for the device-registration flow. Prints with a
+/// `[register]` prefix so it's easy to spot in `flutter run`; a no-op in
+/// release builds.
+void registerDebugLog(String message) {
+  if (kDebugMode) debugPrint('[register] $message');
+}
 
 /// Outcome of a single device-registration attempt, mapped from the tracking
 /// service's gRPC status code (surfaced in the REST error body's `code`) with
@@ -70,12 +78,14 @@ class TrackingService {
   static Future<RegisterResult> registerDevice() async {
     final token = await AuthService.instance.accessToken();
     if (token == null) {
+      registerDebugLog('no access token -> unauthenticated');
       return const RegisterResult(RegisterOutcome.unauthenticated,
           message: 'no access token');
     }
 
     final uniqueId = Preferences.instance.getString(Preferences.id);
     if (uniqueId == null || uniqueId.isEmpty) {
+      registerDebugLog('missing device id (Preferences.id) -> invalid');
       return const RegisterResult(RegisterOutcome.invalid,
           message: 'missing device id (Preferences.id)');
     }
@@ -92,6 +102,10 @@ class TrackingService {
       body['notification_token'] = notificationToken;
     }
 
+    registerDebugLog('POST $_registerUri  unique_id=$uniqueId '
+        'model="${info.model}" os="${info.os}" '
+        'fcm=${body.containsKey('notification_token') ? 'yes' : 'no'}');
+
     final client = await _httpClient();
     try {
       final request = await client.postUrl(_registerUri);
@@ -100,16 +114,23 @@ class TrackingService {
       request.write(jsonEncode(body));
       final response = await request.close();
       final text = await response.transform(utf8.decoder).join();
-      return _mapResponse(response.statusCode, text);
+      final result = _mapResponse(response.statusCode, text);
+      registerDebugLog('HTTP ${response.statusCode} -> ${result.outcome.name}'
+          '${result.message != null ? ' (${result.message})' : ''}'
+          '${result.device != null ? ' traccarDeviceId=${result.device!['traccarDeviceId'] ?? result.device!['traccar_device_id']}' : ''}');
+      return result;
     } on SocketException catch (e) {
+      registerDebugLog('network error: ${e.message} -> retryable');
       developer.log('registerDevice: network error', error: e);
       return const RegisterResult(RegisterOutcome.retryable,
           message: 'network error');
     } on HttpException catch (e) {
+      registerDebugLog('http error: ${e.message} -> retryable');
       developer.log('registerDevice: http error', error: e);
       return const RegisterResult(RegisterOutcome.retryable,
           message: 'http error');
     } catch (e) {
+      registerDebugLog('unexpected error: $e -> retryable');
       developer.log('registerDevice: unexpected error', error: e);
       return RegisterResult(RegisterOutcome.retryable, message: e.toString());
     } finally {
