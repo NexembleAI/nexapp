@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'auth_service.dart';
+import 'geolocation_service.dart';
 import 'l10n/app_localizations.dart';
+import 'main.dart';
 import 'preferences.dart';
 import 'tracking_service.dart';
 
@@ -31,6 +34,7 @@ class _RegistrationGateState extends State<RegistrationGate> {
     super.initState();
     if (_ready) {
       registerDebugLog('device already registered; skipping gate');
+      _ensureTracking(); // resume continuous tracking on this launch
     } else {
       registerDebugLog('not registered; starting registration gate');
       _register();
@@ -60,6 +64,7 @@ class _RegistrationGateState extends State<RegistrationGate> {
     if (result.outcome == RegisterOutcome.success) {
       registerDebugLog('success -> persist flag -> home');
       await Preferences.instance.setBool(Preferences.deviceRegistered, true);
+      await _ensureTracking(); // enable continuous tracking on registration
     } else if (result.outcome == RegisterOutcome.unauthenticated) {
       // Token rejected / refresh failed — force re-authentication. AuthGate
       // then shows the login screen; don't fall through to the home app.
@@ -72,6 +77,28 @@ class _RegistrationGateState extends State<RegistrationGate> {
     }
 
     if (mounted) setState(() => _ready = true);
+  }
+
+  /// Starts continuous tracking once the device is registered (idempotent —
+  /// no-op if already tracking). The SDK prompts for location permission; a
+  /// denial throws [PlatformException], which we surface rather than fail
+  /// silently. The manual home-screen toggle still lets the user pause/resume.
+  Future<void> _ensureTracking() async {
+    try {
+      if (await GeolocationService.tracker.isTracking()) return;
+      await GeolocationService.tracker.start();
+      registerDebugLog('tracking started');
+    } on PlatformException catch (e) {
+      registerDebugLog('tracking start failed: ${e.message}');
+      messengerKey.currentState?.showSnackBar(
+        const SnackBar(
+          content: Text('Tracking needs "Always" location permission to run in the background.'),
+          duration: Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      registerDebugLog('tracking start error: $e');
+    }
   }
 
   Future<void> _showErrorDialog(RegisterOutcome outcome) async {

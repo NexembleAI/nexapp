@@ -5,6 +5,8 @@ import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'auth_config.dart';
+import 'geolocation_service.dart';
+import 'preferences.dart';
 
 /// Keycloak OIDC (Authorization Code + PKCE) via the system browser.
 ///
@@ -104,6 +106,13 @@ class AuthService {
   }
 
   Future<void> logout() async {
+    // Stop continuous tracking on sign-out (best-effort; must not block logout).
+    try {
+      await GeolocationService.tracker.stop();
+    } catch (_) {}
+    // Clear the registration flag so the next login re-registers (idempotent
+    // for the same user+device; surfaces a conflict on user switch).
+    await Preferences.instance.setBool(Preferences.deviceRegistered, false);
     await Future.wait([
       _storage.delete(key: _kAccess),
       _storage.delete(key: _kRefresh),
