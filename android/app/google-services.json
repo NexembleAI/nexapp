@@ -1,14 +1,13 @@
 {
   "project_info": {
-    "project_number": "39016471396",
-    "firebase_url": "https://traccar-client-app.firebaseio.com",
-    "project_id": "traccar-client-app",
-    "storage_bucket": "traccar-client-app.firebasestorage.app"
+    "project_number": "112537386830",
+    "project_id": "nexemble-tracker-dev",
+    "storage_bucket": "nexemble-tracker-dev.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:39016471396:android:b1c7194c699bfa25",
+        "mobilesdk_app_id": "1:112537386830:android:45f3a05881f37f95bde81f",
         "android_client_info": {
           "package_name": "com.nexemble.nexapp"
         }
@@ -16,20 +15,12 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyD5uSOXpbWkR8C3fqdNKQcI7BJrPObpeP4"
+          "current_key": "AIzaSyB6YP4U_pm0XuE0a3YFUCP_54KmbZfREGY"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "39016471396-7mdutolor3h210bm9qmf60gp18lmmhnm.apps.googleusercontent.com",
-              "client_type": 2,
-              "ios_info": {
-                "bundle_id": "org.traccar.client.TraccarClient"
-              }
-            }
-          ]
+          "other_platform_oauth_client": []
         }
       }
     }

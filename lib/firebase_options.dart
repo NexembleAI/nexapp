@@ -50,14 +50,18 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyD5uSOXpbWkR8C3fqdNKQcI7BJrPObpeP4',
-    appId: '1:39016471396:android:b1c7194c699bfa25',
-    messagingSenderId: '39016471396',
-    projectId: 'traccar-client-app',
-    databaseURL: 'https://traccar-client-app.firebaseio.com',
-    storageBucket: 'traccar-client-app.firebasestorage.app',
+    apiKey: 'AIzaSyB6YP4U_pm0XuE0a3YFUCP_54KmbZfREGY',
+    appId: '1:112537386830:android:45f3a05881f37f95bde81f',
+    messagingSenderId: '112537386830',
+    projectId: 'nexemble-tracker-dev',
+    storageBucket: 'nexemble-tracker-dev.firebasestorage.app',
   );
 
+  // TODO(firebase): STALE — these are Traccar's `traccar-client-app` values.
+  // Regenerate for `nexemble-tracker-dev` (via `flutterfire configure`) once the
+  // iOS app + APNs auth key are registered. Not used at runtime today: main()
+  // calls Firebase.initializeApp() with no options, so iOS reads
+  // ios/Runner/GoogleService-Info.plist (also still Traccar's — replace too).
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyBEdxpKXTvJJfYDh28OLffAk4z7S7caf08',
     appId: '1:39016471396:ios:78cbbf5775b43308',
