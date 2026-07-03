@@ -64,6 +64,18 @@ android {
         }
     }
 
+    flavorDimensions += "environment"
+    productFlavors {
+        create("dev") {
+            dimension = "environment"
+            // Same applicationId + label as prod (no suffix). dev/prod differ
+            // only in src/<flavor> resources + the paired NEX_ENV.
+        }
+        create("prod") {
+            dimension = "environment"
+        }
+    }
+
     lint {
         disable.add("NullSafeMutableLiveData")
     }

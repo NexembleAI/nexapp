@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Dev/QA only (prod uses src/main strict). Trust the bundled mkcert CA
+         for any host, plus user-installed CAs for QA proxies/devices. Real
+         certs still validate via system. -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+            <certificates src="@raw/nexemble_ca" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
