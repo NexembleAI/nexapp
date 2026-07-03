@@ -29,6 +29,9 @@ class _RegistrationGateState extends State<RegistrationGate> {
   late bool _ready =
       Preferences.instance.getBool(Preferences.deviceRegistered) == true;
 
+  int _attempt = 1;
+  bool _retrying = false;
+
   @override
   void initState() {
     super.initState();
@@ -48,6 +51,12 @@ class _RegistrationGateState extends State<RegistrationGate> {
   Future<void> _register() async {
     var result = const RegisterResult(RegisterOutcome.retryable);
     for (var attempt = 1; attempt <= _maxAttempts; attempt++) {
+      if (attempt > 1 && mounted) {
+        setState(() {
+          _attempt = attempt;
+          _retrying = true;
+        });
+      }
       registerDebugLog('attempt $attempt/$_maxAttempts');
       result = await TrackingService.registerDevice();
       if (result.outcome != RegisterOutcome.retryable) break;
@@ -127,8 +136,24 @@ class _RegistrationGateState extends State<RegistrationGate> {
   @override
   Widget build(BuildContext context) {
     if (_ready) return widget.child;
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
+    final l = AppLocalizations.of(context)!;
+    final message = _retrying
+        ? '${l.registrationRetrying} ($_attempt/$_maxAttempts)'
+        : l.registrationInProgress;
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(message, textAlign: TextAlign.center),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
