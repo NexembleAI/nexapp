@@ -263,11 +263,14 @@ class TrackingService {
 
   static Future<SecurityContext> _buildSecurityContext() async {
     final context = SecurityContext(withTrustedRoots: true);
-    try {
-      final pem = await rootBundle.load('assets/certs/nexemble_ca.pem');
-      context.setTrustedCertificatesBytes(pem.buffer.asUint8List());
-    } catch (e) {
-      developer.log('registerDevice: failed to load bundled CA', error: e);
+    // Trust the bundled mkcert dev CA in dev only — never in prod.
+    if (AuthConfig.isDev) {
+      try {
+        final pem = await rootBundle.load('assets/certs/nexemble_ca.pem');
+        context.setTrustedCertificatesBytes(pem.buffer.asUint8List());
+      } catch (e) {
+        developer.log('registerDevice: failed to load bundled CA', error: e);
+      }
     }
     return context;
   }

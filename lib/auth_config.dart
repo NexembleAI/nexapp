@@ -7,6 +7,16 @@
 class AuthConfig {
   AuthConfig._();
 
+  /// Deployment environment: 'dev' | 'prod'. Injected via
+  /// `--dart-define=NEX_ENV` (pair it with `--flavor`). Defaults to 'prod' so a
+  /// missing value is fail-safe — a prod build never trusts the dev CA.
+  static const String env =
+      String.fromEnvironment('NEX_ENV', defaultValue: 'prod');
+
+  /// `const` so the dev-CA-trust branch (TrackingService) is dead-code-
+  /// eliminated in prod builds.
+  static const bool isDev = env == 'dev';
+
   /// Base URL of NexCore (reverse proxy in front of Keycloak + platform APIs).
   /// Override with `--dart-define=NEX_CORE_URL=https://...`.
   static const String nexCoreUrl =
