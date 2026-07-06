@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 
 import 'auth_service.dart';
 import 'geolocation_service.dart';
@@ -93,21 +94,47 @@ class _RegistrationGateState extends State<RegistrationGate> {
   /// denial throws [PlatformException], which we surface rather than fail
   /// silently. The manual home-screen toggle still lets the user pause/resume.
   Future<void> _ensureTracking() async {
+    // The SDK swallows a location-permission denial on iOS (start() doesn't
+    // throw and leaves tracking "enabled"), so check permission ourselves and
+    // reconcile the state consistently on both platforms.
+    if (!await _hasLocationPermission()) {
+      registerDebugLog('location permission not granted');
+      await GeolocationService.tracker.stop(); // reflect "off" in the UI
+      _showTrackingPermissionSnackBar();
+      return;
+    }
+    if (await GeolocationService.tracker.isTracking()) return;
     try {
-      if (await GeolocationService.tracker.isTracking()) return;
       await GeolocationService.tracker.start();
       registerDebugLog('tracking started');
     } on PlatformException catch (e) {
       registerDebugLog('tracking start failed: ${e.message}');
-      messengerKey.currentState?.showSnackBar(
-        const SnackBar(
-          content: Text('Tracking needs "Always" location permission to run in the background.'),
-          duration: Duration(seconds: 4),
-        ),
-      );
+      await GeolocationService.tracker.stop();
+      _showTrackingPermissionSnackBar();
     } catch (e) {
       registerDebugLog('tracking start error: $e');
     }
+  }
+
+  /// True when location permission is sufficient to start tracking (matches the
+  /// SDK's own always/whileInUse check). Requests it if not yet determined.
+  Future<bool> _hasLocationPermission() async {
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    return permission == LocationPermission.always ||
+        permission == LocationPermission.whileInUse;
+  }
+
+  void _showTrackingPermissionSnackBar() {
+    if (!mounted) return;
+    messengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Text(AppLocalizations.of(context)!.trackingPermissionRequired),
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 
   Future<void> _showErrorDialog(RegisterOutcome outcome) async {

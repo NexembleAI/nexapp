@@ -12,6 +12,7 @@
   "deviceRegistrationError": "We couldn't finish setting up this device. We'll try again next time you open the app.",
   "registrationInProgress": "Setting up your device…",
   "registrationRetrying": "Connection issue — retrying…",
+  "trackingPermissionRequired": "Tracking needs \"Always\" location permission to run in the background.",
   "locationButton": "Send location",
   "statusButton": "Show status",
   "settingsButton": "Change settings",
