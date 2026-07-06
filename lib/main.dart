@@ -11,8 +11,8 @@ import 'auth_service.dart';
 import 'configuration_service.dart';
 import 'geolocation_service.dart';
 import 'l10n/app_localizations.dart';
+import 'app_shell.dart';
 import 'login_screen.dart';
-import 'main_screen.dart';
 import 'nexemble_reveal.dart';
 import 'preferences.dart';
 import 'registration_gate.dart';
@@ -120,7 +120,7 @@ class AuthGate extends StatelessWidget {
           child: Stack(
             children: [
               QuickActionsInitializer(),
-              MainScreen(),
+              AppShell(),
             ],
           ),
         );

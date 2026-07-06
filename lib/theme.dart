@@ -37,6 +37,27 @@ abstract final class AppTheme {
     );
     return ThemeData(
       colorScheme: scheme,
+      // Design tabs have no M3 indicator pill: active = flat primary icon +
+      // label, inactive = muted outline.
+      navigationBarTheme: NavigationBarThemeData(
+        indicatorColor: Colors.transparent,
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color: states.contains(WidgetState.selected)
+                ? primary
+                : scheme.onSurfaceVariant,
+          ),
+        ),
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: states.contains(WidgetState.selected)
+                ? primary
+                : scheme.onSurfaceVariant,
+          ),
+        ),
+      ),
       cardTheme: CardThemeData(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(cardRadius),
