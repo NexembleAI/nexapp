@@ -1,5 +1,10 @@
 {
   "trackingTitle": "Tracking",
+  "homeTab": "Home",
+  "reportsTab": "Reports",
+  "reportsTitle": "My reports",
+  "alertsTitle": "Alerts",
+  "comingSoonMessage": "Coming soon",
   "settingsTitle": "Settings",
   "settingsSubtitle": "Accuracy, distance, and interval",
   "statusTitle": "Logs",
