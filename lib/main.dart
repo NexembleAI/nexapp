@@ -15,6 +15,7 @@ import 'login_screen.dart';
 import 'main_screen.dart';
 import 'nexemble_reveal.dart';
 import 'preferences.dart';
+import 'registration_gate.dart';
 
 final messengerKey = GlobalKey<ScaffoldMessengerState>();
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -24,6 +25,10 @@ void main() async {
   await Firebase.initializeApp();
   await Preferences.init();
   await GeolocationService.tracker.init(Preferences.buildConfig());
+  // init() is idempotent and won't update an already-installed native config on
+  // an upgraded install, so push the current Preferences to the SDK (covers the
+  // NEX_TRACCAR_URL http->https migration and any future config drift).
+  await GeolocationService.tracker.setConfig(Preferences.buildConfig());
   await PasswordService.migrate();
   await PushService.init();
   await AuthService.instance.restore();
@@ -120,11 +125,13 @@ class AuthGate extends StatelessWidget {
         if (signedIn != true) {
           return const LoginScreen();
         }
-        return const Stack(
-          children: [
-            QuickActionsInitializer(),
-            MainScreen(),
-          ],
+        return const RegistrationGate(
+          child: Stack(
+            children: [
+              QuickActionsInitializer(),
+              MainScreen(),
+            ],
+          ),
         );
       },
     );

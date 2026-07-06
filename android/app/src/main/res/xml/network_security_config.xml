@@ -1,12 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true">
+    <!-- Default (prod): system CA store only; no cleartext, no user CAs.
+         The dev flavor overrides this with src/dev to trust the mkcert CA. -->
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
-            <certificates src="user" />
-            <!-- Trust the internal mkcert CA so OIDC discovery / token calls to
-                 the Keycloak host validate normally (no trust-all). -->
-            <certificates src="@raw/nexemble_ca" />
         </trust-anchors>
     </base-config>
 </network-security-config>

@@ -7,10 +7,35 @@
 class AuthConfig {
   AuthConfig._();
 
+  /// Deployment environment: 'dev' | 'prod'. Injected via
+  /// `--dart-define=NEX_ENV` (pair it with `--flavor`). Defaults to 'prod' so a
+  /// missing value is fail-safe — a prod build never trusts the dev CA.
+  static const String env =
+      String.fromEnvironment('NEX_ENV', defaultValue: 'prod');
+
+  /// `const` so the dev-CA-trust branch (TrackingService) is dead-code-
+  /// eliminated in prod builds.
+  static const bool isDev = env == 'dev';
+
   /// Base URL of NexCore (reverse proxy in front of Keycloak + platform APIs).
   /// Override with `--dart-define=NEX_CORE_URL=https://...`.
   static const String nexCoreUrl =
       String.fromEnvironment('NEX_CORE_URL', defaultValue: 'https://app.nexemble.local');
+
+  /// Nexcore tenant id, a path parameter on every `/v1/api/tenant/{id}/...`
+  /// call. It is **not** carried in the access token (the realm emits no tenant
+  /// claim), so it is hard-coded here.
+  static const String tenantId = '2';
+
+  /// Traccar OsmAnd ingest endpoint the tracker SDK posts positions to.
+  /// Injected at build time; seeds the persisted `Preferences.url` and, on a
+  /// build where this value changes, overrides the stored one (see
+  /// Preferences._createInstance). Override with
+  /// `--dart-define=NEX_TRACCAR_URL=https://...`.
+  static const String serverUrl = String.fromEnvironment(
+    'NEX_TRACCAR_URL',
+    defaultValue: 'https://traccar.nexemble.local:5055',
+  );
 
   /// Public OIDC client registered in the `default` realm.
   static const String clientId =

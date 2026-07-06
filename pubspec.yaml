@@ -22,6 +22,8 @@ dependencies:
   app_links: ^7.0.0
   flutter_svg: ^2.0.17
   flutter_appauth: ^12.0.2
+  device_info_plus: ^11.1.0
+  geolocator: ^13.0.0
 
 dev_dependencies:
   flutter_test:
@@ -32,6 +34,8 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   generate: true
+  assets:
+    - assets/certs/nexemble_ca.pem
 
 flutter_launcher_icons:
   ios: true
