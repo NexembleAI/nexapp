@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'auth_service.dart';
 import 'l10n/app_localizations.dart';
 import 'theme.dart';
+import 'today_stats_row.dart';
 import 'tracking_card.dart';
 
 /// Home tab (design screen 04): header (date, greeting, avatar), hero
@@ -96,7 +97,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 16),
             const TrackingCard(),
-            // Today stats and visits list go here.
+            const SizedBox(height: 16),
+            const TodayStatsRow(),
+            // Today's visits list goes here.
           ],
         ),
       ),
