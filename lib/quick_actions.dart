@@ -21,9 +21,9 @@ class _QuickActionsInitializerState extends State<QuickActionsInitializer> {
     quickActions.initialize((shortcutType) async {
       switch (shortcutType) {
         case 'start':
-          await GeolocationService.tracker.start();
+          await GeolocationService.start();
         case 'stop':
-          await GeolocationService.tracker.stop();
+          await GeolocationService.stop();
         case 'sos':
           await GeolocationService.tracker.requestPosition(alarm: 'sos');
       }

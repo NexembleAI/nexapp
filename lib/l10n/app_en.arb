@@ -1,5 +1,19 @@
 {
   "trackingTitle": "Tracking",
+  "trackingOn": "Tracking on",
+  "trackingOff": "Tracking off",
+  "officeHoursBadge": "Office hours",
+  "todayWindowLabel": "Today's window",
+  "positionsSyncing": "Positions syncing",
+  "activeSince": "Active since {time}",
+  "@activeSince": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "trackingNotRunning": "Tracking is not running",
   "homeTab": "Home",
   "homeGreetingMorning": "Good morning",
   "homeGreetingAfternoon": "Good afternoon",

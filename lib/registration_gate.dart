@@ -95,21 +95,21 @@ class _RegistrationGateState extends State<RegistrationGate> {
   /// silently. The manual home-screen toggle still lets the user pause/resume.
   Future<void> _ensureTracking() async {
     // The SDK swallows a location-permission denial on iOS (start() doesn't
-    // throw and leaves tracking "enabled"), so check permission ourselves and
-    // reconcile the state consistently on both platforms.
+    // throw), so check permission ourselves and surface it consistently on
+    // both platforms. The home card derives its status from the same check.
     if (!await _hasLocationPermission()) {
+      // Don't stop() here: that would persist "tracking off" and disarm the
+      // SDK's background self-resume over a temporary OS condition.
       registerDebugLog('location permission not granted');
-      await GeolocationService.tracker.stop(); // reflect "off" in the UI
       _showTrackingPermissionSnackBar();
       return;
     }
     if (await GeolocationService.tracker.isTracking()) return;
     try {
-      await GeolocationService.tracker.start();
+      await GeolocationService.start();
       registerDebugLog('tracking started');
     } on PlatformException catch (e) {
       registerDebugLog('tracking start failed: ${e.message}');
-      await GeolocationService.tracker.stop();
       _showTrackingPermissionSnackBar();
     } catch (e) {
       registerDebugLog('tracking start error: $e');

@@ -108,7 +108,7 @@ class AuthService {
   Future<void> logout() async {
     // Stop continuous tracking on sign-out (best-effort; must not block logout).
     try {
-      await GeolocationService.tracker.stop();
+      await GeolocationService.stop();
     } catch (_) {}
     // Clear the registration flag so the next login re-registers (idempotent
     // for the same user+device; surfaces a conflict on user switch).
