@@ -2,8 +2,16 @@ import 'package:flutter/material.dart';
 
 /// Lifecycle of a visit report, client- and server-side states combined.
 /// queued/uploading exist only in the local offline queue (design screen 06);
-/// submitted/transcribing/ready mirror tracking.visit_report.status.
-enum ReportStatus { queued, uploading, submitted, transcribing, ready }
+/// the rest mirror tracking.visit_report.status (§4.4).
+enum ReportStatus {
+  queued,
+  uploading,
+  submitted,
+  transcribing,
+  ready,
+  transcriptFailed,
+  archived,
+}
 
 /// One visit row (Home "Today's visits" and the Reports history).
 class VisitEntry {
