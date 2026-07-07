@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'alerts_repository.dart';
 import 'alerts_screen.dart';
+import 'home_screen.dart';
 import 'l10n/app_localizations.dart';
-import 'main_screen.dart';
 import 'reports_screen.dart';
 import 'settings_screen.dart';
 import 'theme.dart';
@@ -28,7 +28,7 @@ class _AppShellState extends State<AppShell> {
       body: IndexedStack(
         index: _index,
         children: const [
-          MainScreen(),
+          HomeScreen(),
           ReportsScreen(),
           AlertsScreen(),
           SettingsScreen(),
