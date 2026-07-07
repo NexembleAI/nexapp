@@ -32,9 +32,9 @@ class PushService {
       case 'positionSingle':
         await GeolocationService.tracker.requestPosition();
       case 'positionPeriodic':
-        await GeolocationService.tracker.start();
+        await GeolocationService.start();
       case 'positionStop':
-        await GeolocationService.tracker.stop();
+        await GeolocationService.stop();
       case 'factoryReset':
         await PasswordService.setPassword('');
     }

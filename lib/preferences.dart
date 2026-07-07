@@ -29,6 +29,9 @@ class Preferences {
   // Last build-time NEX_TRACCAR_URL (AuthConfig.serverUrl) applied to `url`.
   // Lets a new build whose define changed override the persisted `url`.
   static const String urlConfig = 'url_config';
+  // ISO-8601 time the current tracking session started ("Active since" on the
+  // home card). Written/cleared by GeolocationService.start()/stop().
+  static const String trackingStartedAt = 'tracking_started_at';
 
   static Future<void> init() async {
     _initFuture ??= _createInstance();
@@ -42,7 +45,7 @@ class Preferences {
           : SharedPreferencesOptions(),
       cacheOptions: SharedPreferencesWithCacheOptions(
         allowList: {
-          id, url, accuracy, distance, interval, angle, heartbeat, buffer, wakelock, stopDetection, preferPlatformProviders, password, deviceRegistered, urlConfig,
+          id, url, accuracy, distance, interval, angle, heartbeat, buffer, wakelock, stopDetection, preferPlatformProviders, password, deviceRegistered, urlConfig, trackingStartedAt,
         },
       ),
     );

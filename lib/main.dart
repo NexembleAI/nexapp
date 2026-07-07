@@ -69,9 +69,9 @@ class _MainAppState extends State<MainApp> {
     if (uri.host == 'action') {
       switch (uri.pathSegments.firstOrNull) {
         case 'start':
-          await GeolocationService.tracker.start();
+          await GeolocationService.start();
         case 'stop':
-          await GeolocationService.tracker.stop();
+          await GeolocationService.stop();
       }
       return;
     }
