@@ -23,6 +23,24 @@
   "alertsTitle": "Alerts",
   "visitsLabel": "Visits",
   "reportsLabel": "Reports",
+  "todaysVisitsTitle": "Today's visits",
+  "noVisitsToday": "No visits yet today",
+  "visitsLoadError": "Couldn't load today's visits",
+  "dwellMinutes": "{minutes} min dwell",
+  "@dwellMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "statusReady": "Ready",
+  "statusTranscribing": "Transcribing",
+  "statusQueued": "Queued",
+  "statusUploading": "Uploading…",
+  "statusSubmitted": "Submitted",
+  "statusTranscriptFailed": "Transcript failed",
+  "statusArchived": "Archived",
   "comingSoonMessage": "Coming soon",
   "settingsTitle": "Settings",
   "settingsSubtitle": "Accuracy, distance, and interval",
