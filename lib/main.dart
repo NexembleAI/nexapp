@@ -11,12 +11,16 @@ import 'auth_service.dart';
 import 'configuration_service.dart';
 import 'geolocation_service.dart';
 import 'l10n/app_localizations.dart';
+import 'alerts_repository.dart';
 import 'app_shell.dart';
 import 'login_screen.dart';
+import 'mock/mock_repositories.dart'; // TODO(mock): remove with lib/mock/
 import 'nexemble_reveal.dart';
 import 'preferences.dart';
 import 'registration_gate.dart';
+import 'reports_repository.dart';
 import 'theme.dart';
+import 'tracking_repository.dart';
 
 final messengerKey = GlobalKey<ScaffoldMessengerState>();
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -33,6 +37,11 @@ void main() async {
   await PasswordService.migrate();
   await PushService.init();
   await AuthService.instance.restore();
+  // Data-source wiring: each line flips to a real implementation as its
+  // backend lands; lib/mock/ is deleted with the last one.
+  ReportsRepository.instance = MockReportsRepository();
+  AlertsRepository.instance = MockAlertsRepository();
+  TrackingRepository.instance = MockTrackingRepository();
   runApp(const MainApp());
 }
 
