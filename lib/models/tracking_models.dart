@@ -1,0 +1,37 @@
+import 'package:flutter/material.dart';
+
+/// Lifecycle of a visit report, client- and server-side states combined.
+/// queued/uploading exist only in the local offline queue (design screen 06);
+/// submitted/transcribing/ready mirror tracking.visit_report.status.
+enum ReportStatus { queued, uploading, submitted, transcribing, ready }
+
+/// One visit row (Home "Today's visits" and the Reports history).
+class VisitEntry {
+  final String customerName;
+  final DateTime enteredAt;
+  final Duration dwell;
+  final ReportStatus status;
+
+  const VisitEntry({
+    required this.customerName,
+    required this.enteredAt,
+    required this.dwell,
+    required this.status,
+  });
+}
+
+/// Counts for the Home stats row (alerts count comes from AlertsRepository).
+class TodayStats {
+  final int visits;
+  final int reports;
+
+  const TodayStats({required this.visits, required this.reports});
+}
+
+/// Office-hours window (mirrors tracking.device.office_hours).
+class OfficeHours {
+  final TimeOfDay start;
+  final TimeOfDay end;
+
+  const OfficeHours({required this.start, required this.end});
+}

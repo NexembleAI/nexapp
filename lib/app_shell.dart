@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
+import 'alerts_repository.dart';
 import 'alerts_screen.dart';
 import 'l10n/app_localizations.dart';
 import 'main_screen.dart';
 import 'reports_screen.dart';
 import 'settings_screen.dart';
+import 'theme.dart';
 
 /// Bottom-tab shell from the design handoff (Global navigation): Home,
 /// Reports, Alerts, Settings. IndexedStack keeps each tab's state alive
@@ -47,8 +49,8 @@ class _AppShellState extends State<AppShell> {
             label: l.reportsTab,
           ),
           NavigationDestination(
-            icon: const Icon(Icons.notifications_outlined),
-            selectedIcon: const Icon(Icons.notifications),
+            icon: const _AlertsBadge(child: Icon(Icons.notifications_outlined)),
+            selectedIcon: const _AlertsBadge(child: Icon(Icons.notifications)),
             label: l.alertsTitle,
           ),
           NavigationDestination(
@@ -58,6 +60,30 @@ class _AppShellState extends State<AppShell> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Amber count badge on the Alerts tab (design: status semantics — warning),
+/// hidden while loading or when there are no open alerts.
+class _AlertsBadge extends StatelessWidget {
+  final Widget child;
+
+  const _AlertsBadge({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<int>(
+      future: AlertsRepository.instance.openAlertsCount(),
+      builder: (context, snapshot) {
+        final count = snapshot.data ?? 0;
+        return Badge.count(
+          count: count,
+          isLabelVisible: count > 0,
+          backgroundColor: AppTheme.warning,
+          child: child,
+        );
+      },
     );
   }
 }
