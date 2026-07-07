@@ -1,6 +1,9 @@
 {
   "trackingTitle": "Tracking",
   "homeTab": "Home",
+  "homeGreetingMorning": "Good morning",
+  "homeGreetingAfternoon": "Good afternoon",
+  "homeGreetingEvening": "Good evening",
   "reportsTab": "Reports",
   "reportsTitle": "My reports",
   "alertsTitle": "Alerts",
