@@ -21,6 +21,8 @@
   "reportsTab": "Reports",
   "reportsTitle": "My reports",
   "alertsTitle": "Alerts",
+  "visitsLabel": "Visits",
+  "reportsLabel": "Reports",
   "comingSoonMessage": "Coming soon",
   "settingsTitle": "Settings",
   "settingsSubtitle": "Accuracy, distance, and interval",
