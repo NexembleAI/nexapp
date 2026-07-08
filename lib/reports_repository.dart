@@ -10,4 +10,8 @@ abstract class ReportsRepository {
   Future<TodayStats> todayStats();
 
   Future<List<VisitEntry>> todayVisits();
+
+  /// Full report history, newest first. The real implementation merges the
+  /// server list with the local offline upload queue (queued/uploading rows).
+  Future<List<ReportEntry>> reports();
 }

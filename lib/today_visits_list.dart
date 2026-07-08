@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'l10n/app_localizations.dart';
 import 'models/tracking_models.dart';
 import 'reports_repository.dart';
+import 'status_chip.dart';
 import 'theme.dart';
 
 /// "Today's visits" section on Home (design screen 04): section label and a
@@ -141,46 +142,8 @@ class _VisitRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          _StatusChip(status: visit.status),
+          StatusChip(status: visit.status),
         ],
-      ),
-    );
-  }
-}
-
-/// Status chip per the design's status semantics: green = ready, amber =
-/// in-flight or needs attention (queued/uploading/transcribing/failed),
-/// primary = submitted, muted = archived.
-class _StatusChip extends StatelessWidget {
-  final ReportStatus status;
-
-  const _StatusChip({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context)!;
-    final (color, label) = switch (status) {
-      ReportStatus.ready => (AppTheme.success, l.statusReady),
-      ReportStatus.transcribing => (AppTheme.warning, l.statusTranscribing),
-      ReportStatus.queued => (AppTheme.warning, l.statusQueued),
-      ReportStatus.uploading => (AppTheme.warning, l.statusUploading),
-      ReportStatus.transcriptFailed =>
-        (AppTheme.warning, l.statusTranscriptFailed),
-      ReportStatus.submitted =>
-        (Theme.of(context).colorScheme.primary, l.statusSubmitted),
-      ReportStatus.archived =>
-        (Theme.of(context).colorScheme.onSurfaceVariant, l.statusArchived),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style:
-            TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600),
       ),
     );
   }
