@@ -72,9 +72,35 @@ class _HomeScreenState extends State<HomeScreen> {
         : '${_greeting(l)}, $_firstName';
 
     return Scaffold(
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              elevation: 3,
+              shadowColor: theme.colorScheme.shadow,
+            ),
+            onPressed: () {
+              // Opens the visit-capture screen (design screen 05) once built.
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(l.comingSoonMessage),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+            icon: const Icon(Icons.add),
+            label: Text(l.fileVisitReport),
+          ),
+        ),
+      ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          // Extra bottom inset so the last row scrolls clear of the button.
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
           children: [
             Text(
               date,
@@ -109,7 +135,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// Spectrum-gradient initials avatar (design: brand accent on avatars).
+/// Header initials avatar: primary-tint circle with flat primary initials
+/// (measured from the home mockups: letters #356EDE light / #3B82F6 dark —
+/// the spectrum-gradient avatar style belongs to the Settings account card).
 class _Avatar extends StatelessWidget {
   final String initials;
 
@@ -117,24 +145,20 @@ class _Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: 40,
       height: 40,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.spectrumMagenta,
-            AppTheme.spectrumIndigo,
-            AppTheme.spectrumBlue,
-          ],
-        ),
+        color: AppTheme.primary.withValues(alpha: 0.18),
       ),
       alignment: Alignment.center,
       child: Text(
         initials,
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
+          // Lighter blue in dark mode for contrast against the dark tint.
+          color: dark ? const Color(0xFF3B82F6) : AppTheme.primary,
           fontWeight: FontWeight.w600,
           fontSize: 14,
         ),

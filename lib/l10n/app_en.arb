@@ -24,6 +24,7 @@
   "visitsLabel": "Visits",
   "reportsLabel": "Reports",
   "todaysVisitsTitle": "Today's visits",
+  "fileVisitReport": "File a visit report",
   "noVisitsToday": "No visits yet today",
   "visitsLoadError": "Couldn't load today's visits",
   "dwellMinutes": "{minutes} min dwell",

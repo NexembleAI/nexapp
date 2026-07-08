@@ -17,6 +17,14 @@ abstract final class AppTheme {
   static const Color warning = Color(0xFFD97706); // Queued / Transcribing / Battery
   static const Color recording = Color(0xFFE0245E);
 
+  // NexUI muted-foreground for section labels, measured from the home mocks
+  // (indigo-cast in light, neutral gray in dark). Stand-in until the real
+  // NexUI token values are available.
+  static Color mutedLabel(Brightness brightness) =>
+      brightness == Brightness.dark
+          ? const Color(0xFF85858E)
+          : const Color(0xFF6381BE);
+
   // Shape
   static const double cardRadius = 18;
   static const double controlRadius = 14;
