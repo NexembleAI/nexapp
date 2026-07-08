@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'entity_avatar.dart';
 import 'l10n/app_localizations.dart';
 import 'models/tracking_models.dart';
 import 'reports_repository.dart';
@@ -85,13 +86,6 @@ class _VisitRow extends StatelessWidget {
 
   const _VisitRow({required this.visit});
 
-  String _initials(String name) => name
-      .split(RegExp(r'\s+'))
-      .where((w) => w.isNotEmpty)
-      .take(2)
-      .map((w) => w[0].toUpperCase())
-      .join();
-
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
@@ -103,22 +97,9 @@ class _VisitRow extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       child: Row(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              _initials(visit.customerName),
-              style: TextStyle(
-                color: theme.colorScheme.primary,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
-            ),
+          EntityAvatar(
+            name: visit.customerName,
+            color: theme.colorScheme.primary,
           ),
           const SizedBox(width: 12),
           Expanded(
