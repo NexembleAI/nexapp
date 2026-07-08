@@ -67,8 +67,7 @@ class _TodayVisitsListState extends State<TodayVisitsList> {
         Text(
           l.todaysVisitsTitle.toUpperCase(),
           style: theme.textTheme.labelSmall?.copyWith(
-            // Muted indigo per the design mock — softened primary, not full.
-            color: AppTheme.primary.withValues(alpha: 0.75),
+            color: AppTheme.mutedLabel(theme.brightness),
             fontWeight: FontWeight.w600,
             letterSpacing: 0.8,
           ),
