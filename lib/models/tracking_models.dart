@@ -28,6 +28,35 @@ class VisitEntry {
   });
 }
 
+/// One row in the Reports history (design screen 07). Distinct from
+/// VisitEntry: reports span days and carry content/upload facts the
+/// home visit list doesn't show.
+class ReportEntry {
+  final String customerName;
+  final DateTime createdAt;
+
+  /// Session dwell; null when there is none to show (report not yet synced,
+  /// or no geofence session to measure).
+  final Duration? dwell;
+  final ReportStatus status;
+  final bool hasAudio;
+  final bool hasNotes;
+
+  /// False mirrors tracking.visit_report.geofence_present = false — renders
+  /// the "No geofence — location recorded" note instead of time · dwell.
+  final bool geofencePresent;
+
+  const ReportEntry({
+    required this.customerName,
+    required this.createdAt,
+    this.dwell,
+    required this.status,
+    required this.hasAudio,
+    required this.hasNotes,
+    this.geofencePresent = true,
+  });
+}
+
 /// Counts for the Home stats row (alerts count comes from AlertsRepository).
 class TodayStats {
   final int visits;
