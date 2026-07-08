@@ -8,9 +8,13 @@ import 'reports_repository.dart';
 import 'status_chip.dart';
 import 'theme.dart';
 
-/// Reports history tab (design screen 07): report cards with avatar, name
-/// (+ audio glyph), relative time/dwell or the no-geofence note, and a status
-/// chip. Queued cards get an amber border. Filters come separately.
+/// Orthogonal report filters; they combine with AND. "All" is not a filter —
+/// it's the empty set.
+enum _ReportFilter { thisWeek, ready, audio }
+
+/// Reports history tab (design screen 07): filter chips over report cards
+/// with avatar, name (+ audio glyph), relative time/dwell or the no-geofence
+/// note, and a status chip. Queued cards get an amber border.
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
 
@@ -21,6 +25,7 @@ class ReportsScreen extends StatefulWidget {
 class _ReportsScreenState extends State<ReportsScreen> {
   List<ReportEntry>? _reports;
   bool _error = false;
+  final Set<_ReportFilter> _active = {};
 
   @override
   void initState() {
@@ -37,24 +42,49 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
+  void _toggle(_ReportFilter f) => setState(() {
+        if (!_active.remove(f)) _active.add(f);
+      });
+
+  /// "This week" = current calendar week starting Monday.
+  List<ReportEntry> _visible(List<ReportEntry> all) {
+    var result = all;
+    if (_active.contains(_ReportFilter.thisWeek)) {
+      final now = DateTime.now();
+      final monday = DateTime(now.year, now.month, now.day)
+          .subtract(Duration(days: now.weekday - 1));
+      result = result.where((r) => !r.createdAt.isBefore(monday)).toList();
+    }
+    if (_active.contains(_ReportFilter.ready)) {
+      result = result.where((r) => r.status == ReportStatus.ready).toList();
+    }
+    if (_active.contains(_ReportFilter.audio)) {
+      result = result.where((r) => r.hasAudio).toList();
+    }
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
 
-    final Widget body;
+    final Widget content;
     if (_error) {
-      body = _Message(l.reportsLoadError);
+      content = _Message(l.reportsLoadError);
     } else if (_reports == null) {
-      body = const _SkeletonList();
+      content = const _SkeletonList();
     } else if (_reports!.isEmpty) {
-      body = _Message(l.noReportsYet);
+      content = _Message(l.noReportsYet);
     } else {
-      body = ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: _reports!.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 12),
-        itemBuilder: (context, i) => _ReportCard(report: _reports![i]),
-      );
+      final visible = _visible(_reports!);
+      content = visible.isEmpty
+          ? _Message(l.noMatchingReports)
+          : ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: visible.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
+              itemBuilder: (context, i) => _ReportCard(report: visible[i]),
+            );
     }
 
     return Scaffold(
@@ -68,7 +98,113 @@ class _ReportsScreenState extends State<ReportsScreen> {
           ),
         ],
       ),
-      body: body,
+      body: Column(
+        children: [
+          _FilterRow(
+            active: _active,
+            onToggle: _toggle,
+            onClear: () => setState(_active.clear),
+          ),
+          Expanded(child: content),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterRow extends StatelessWidget {
+  final Set<_ReportFilter> active;
+  final void Function(_ReportFilter) onToggle;
+  final VoidCallback onClear;
+
+  const _FilterRow({
+    required this.active,
+    required this.onToggle,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      child: Row(
+        children: [
+          _FilterChip(
+            label: l.filterAll,
+            selected: active.isEmpty,
+            onTap: onClear,
+          ),
+          const SizedBox(width: 8),
+          for (final (f, label, icon) in [
+            (_ReportFilter.thisWeek, l.filterThisWeek, null),
+            (_ReportFilter.ready, l.filterReady, null),
+            (_ReportFilter.audio, l.filterAudio, Icons.headphones),
+          ]) ...[
+            _FilterChip(
+              label: label,
+              icon: icon,
+              selected: active.contains(f),
+              onTap: () => onToggle(f),
+            ),
+            const SizedBox(width: 8),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Pill chip: selected = flat primary with white text, unselected = card
+/// surface with a hairline border and muted text.
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _FilterChip({
+    required this.label,
+    this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final fg = selected ? Colors.white : theme.colorScheme.onSurfaceVariant;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? theme.colorScheme.primary : theme.cardTheme.color,
+          borderRadius: BorderRadius.circular(999),
+          border: selected
+              ? null
+              : Border.all(color: theme.colorScheme.outlineVariant),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 14, color: fg),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                color: fg,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
