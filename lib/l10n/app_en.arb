@@ -35,6 +35,11 @@
       }
     }
   },
+  "filterAll": "All",
+  "filterThisWeek": "This week",
+  "filterReady": "Ready",
+  "filterAudio": "Audio",
+  "noMatchingReports": "No reports match this filter",
   "noReportsYet": "No reports yet",
   "reportsLoadError": "Couldn't load reports",
   "noGeofenceNote": "No geofence — location recorded",
