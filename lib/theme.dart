@@ -17,6 +17,14 @@ abstract final class AppTheme {
   static const Color warning = Color(0xFFD97706); // Queued / Transcribing / Battery
   static const Color recording = Color(0xFFE0245E);
 
+  // Page and card surfaces measured from the mocks (NexUI --background /
+  // --card). Without these, Material derives grey-lavender surfaces from the
+  // seed and cards lose the design's white-on-near-white look.
+  static const Color _pageLight = Color(0xFFFAFBFF);
+  static const Color _pageDark = Color(0xFF000114);
+  static const Color _cardLight = Color(0xFFFFFFFF);
+  static const Color _cardDark = Color(0xFF02001F);
+
   // NexUI muted-foreground for section labels, measured from the home mocks
   // (indigo-cast in light, neutral gray in dark). Stand-in until the real
   // NexUI token values are available.
@@ -43,11 +51,27 @@ abstract final class AppTheme {
       primary: primary,
       onPrimary: Colors.white,
     );
+    final dark = brightness == Brightness.dark;
+    final page = dark ? _pageDark : _pageLight;
+    final card = dark ? _cardDark : _cardLight;
     return ThemeData(
       colorScheme: scheme,
+      scaffoldBackgroundColor: page,
+      // Left-aligned bold titles on both platforms (iOS would center, and
+      // M3's default title weight is regular).
+      appBarTheme: AppBarTheme(
+        backgroundColor: page,
+        centerTitle: false,
+        titleTextStyle: TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.w700,
+          color: scheme.onSurface,
+        ),
+      ),
       // Design tabs have no M3 indicator pill: active = flat primary icon +
       // label, inactive = muted outline.
       navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: card,
         indicatorColor: Colors.transparent,
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
@@ -67,6 +91,8 @@ abstract final class AppTheme {
         ),
       ),
       cardTheme: CardThemeData(
+        color: card,
+        surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(cardRadius),
         ),
