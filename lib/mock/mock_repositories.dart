@@ -95,11 +95,90 @@ class MockReportsRepository implements ReportsRepository {
 }
 
 class MockAlertsRepository implements AlertsRepository {
+  final _AlertChanges _changes = _AlertChanges();
+
+  // In-memory state so ack/snooze visibly move cards between sections.
+  late final List<LeadAlert> _alerts = () {
+    final now = DateTime.now();
+    return [
+      LeadAlert(
+        id: 'a1',
+        leadTitle: 'Q3 Fleet Renewal',
+        accountName: 'Apex Manufacturing',
+        reason: AlertReason.noVisitWindow,
+        daysSinceVisit: 9,
+        thresholdDays: 7,
+        createdAt: now,
+        status: AlertStatus.open,
+      ),
+      LeadAlert(
+        id: 'a2',
+        leadTitle: 'Annual Supply Contract',
+        accountName: 'Coastal Retail Group',
+        reason: AlertReason.nextActivityOverdue,
+        closeInDays: 12,
+        createdAt: now.subtract(const Duration(days: 1)),
+        status: AlertStatus.open,
+      ),
+      LeadAlert(
+        id: 'a3',
+        leadTitle: 'POS Rollout',
+        accountName: 'Harbor & Co.',
+        reason: AlertReason.noVisitWindow,
+        daysSinceVisit: 12,
+        thresholdDays: 10,
+        createdAt: now.subtract(const Duration(days: 2)),
+        status: AlertStatus.ack,
+      ),
+      LeadAlert(
+        id: 'a4',
+        leadTitle: 'Lead going stale',
+        accountName: 'Solstice Hospitality',
+        reason: AlertReason.leadStale,
+        createdAt: now.subtract(const Duration(days: 3)),
+        status: AlertStatus.snoozed,
+        snoozeUntil: now.add(const Duration(days: 4)),
+      ),
+    ];
+  }();
+
+  @override
+  Listenable get changes => _changes;
+
   @override
   Future<int> openAlertsCount() async {
     await Future.delayed(_latency);
-    return 2;
+    return _alerts.where((a) => a.needsAction).length;
   }
+
+  @override
+  Future<List<LeadAlert>> alerts() async {
+    await Future.delayed(_latency);
+    return List.unmodifiable(_alerts);
+  }
+
+  @override
+  Future<void> ack(String id) =>
+      _update(id, (a) => a.copyWith(status: AlertStatus.ack));
+
+  @override
+  Future<void> snooze(String id, DateTime until) => _update(
+      id, (a) => a.copyWith(status: AlertStatus.snoozed, snoozeUntil: until));
+
+  Future<void> _update(
+      String id, LeadAlert Function(LeadAlert) transform) async {
+    await Future.delayed(_latency);
+    final i = _alerts.indexWhere((a) => a.id == id);
+    if (i >= 0) {
+      _alerts[i] = transform(_alerts[i]);
+      _changes.bump();
+    }
+  }
+}
+
+/// ChangeNotifier with a public notify — notifyListeners is protected.
+class _AlertChanges extends ChangeNotifier {
+  void bump() => notifyListeners();
 }
 
 class MockTrackingRepository implements TrackingRepository {
