@@ -2,6 +2,10 @@ import 'package:flutter/foundation.dart';
 
 import 'models/tracking_models.dart';
 
+/// Client-side default until snooze policy (duration/cap) is defined
+/// server-side — coverage_rule has no snooze columns yet (§4.6 gap).
+const Duration defaultSnoozeDuration = Duration(days: 3);
+
 /// Lead-coverage alerts domain (backend arrives in Phase 3).
 abstract class AlertsRepository {
   /// Assigned once at startup (main.dart): mock now, Nexcore-backed later.

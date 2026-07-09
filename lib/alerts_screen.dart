@@ -43,15 +43,11 @@ class _AlertsScreenState extends State<AlertsScreen> {
     }
   }
 
-  /// Placeholder until snooze policy (duration/cap) is defined server-side —
-  /// the coverage_rule schema has no snooze columns yet (§4.6 gap).
-  static const _snoozeDuration = Duration(days: 3);
-
   Future<void> _ack(LeadAlert a) => AlertsRepository.instance.ack(a.id);
 
   Future<void> _snooze(LeadAlert a) => AlertsRepository.instance.snooze(
     a.id,
-    DateTime.now().add(_snoozeDuration),
+    DateTime.now().add(defaultSnoozeDuration),
   );
 
   void _openDetail(LeadAlert a) {

@@ -26,6 +26,34 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
   void initState() {
     super.initState();
     _load();
+    // Re-resolve on any mutation (from this screen or the inbox behind it):
+    // the timeline grows and button visibility re-evaluates in place.
+    AlertsRepository.instance.changes.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    AlertsRepository.instance.changes.removeListener(_load);
+    super.dispose();
+  }
+
+  Future<void> _ack() => AlertsRepository.instance.ack(widget.alertId);
+
+  Future<void> _snooze() => AlertsRepository.instance.snooze(
+        widget.alertId,
+        DateTime.now().add(defaultSnoozeDuration),
+      );
+
+  void _fileReport() {
+    // Opens visit capture (design screen 05) pre-targeted at this lead,
+    // once built.
+    final l = AppLocalizations.of(context)!;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(l.comingSoonMessage),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<void> _load() async {
@@ -76,7 +104,12 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
           : SafeArea(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: _Actions(alert: alert),
+                child: _Actions(
+                  alert: alert,
+                  onFileReport: _fileReport,
+                  onAck: _ack,
+                  onSnooze: _snooze,
+                ),
               ),
             ),
     );
@@ -428,8 +461,16 @@ class _TimelineItem extends StatelessWidget {
 /// re-acked, snoozed ones can't be re-snoozed (cap is server policy).
 class _Actions extends StatelessWidget {
   final LeadAlert alert;
+  final VoidCallback onFileReport;
+  final VoidCallback onAck;
+  final VoidCallback onSnooze;
 
-  const _Actions({required this.alert});
+  const _Actions({
+    required this.alert,
+    required this.onFileReport,
+    required this.onAck,
+    required this.onSnooze,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -459,7 +500,7 @@ class _Actions extends StatelessWidget {
           width: double.infinity,
           height: 48,
           child: FilledButton(
-            onPressed: () {}, // wired in the behavior step
+            onPressed: onFileReport,
             child: Text(
               l.fileVisitReportFor(alert.accountName.split(' ').first),
             ),
@@ -469,9 +510,9 @@ class _Actions extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              if (showAck) Expanded(child: pill(l.acknowledgeButton, () {})),
+              if (showAck) Expanded(child: pill(l.acknowledgeButton, onAck)),
               if (showAck && showSnooze) const SizedBox(width: 10),
-              if (showSnooze) Expanded(child: pill(l.snoozeButton, () {})),
+              if (showSnooze) Expanded(child: pill(l.snoozeButton, onSnooze)),
             ],
           ),
         ],
