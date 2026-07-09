@@ -21,6 +21,58 @@
   "reportsTab": "Reports",
   "reportsTitle": "My reports",
   "alertsTitle": "Alerts",
+  "needActionCount": "{count} need action",
+  "@needActionCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "actionNeeded": "Action needed",
+  "fileReportButton": "File report",
+  "snoozeButton": "Snooze",
+  "ackButton": "Ack",
+  "earlierLabel": "Earlier",
+  "acknowledgedChip": "Acknowledged",
+  "untilChip": "Until {date}",
+  "@untilChip": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "daysAgo": "{days}d ago",
+  "@daysAgo": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "reasonNoVisit": "No visit in {days} days · threshold is {threshold}",
+  "@reasonNoVisit": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      },
+      "threshold": {
+        "type": "int"
+      }
+    }
+  },
+  "reasonNextActivityOverdue": "Next activity overdue — close date in {days} days",
+  "@reasonNextActivityOverdue": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "reasonLeadStale": "Lead has gone stale",
+  "noAlerts": "No alerts",
+  "alertsLoadError": "Couldn't load alerts",
   "visitsLabel": "Visits",
   "reportsLabel": "Reports",
   "todaysVisitsTitle": "Today's visits",
