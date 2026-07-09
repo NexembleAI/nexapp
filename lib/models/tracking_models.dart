@@ -71,6 +71,24 @@ enum AlertStatus { open, ack, snoozed, resolved, escalated }
 /// Why the alert fired — lead_alert.reason_code.
 enum AlertReason { noVisitWindow, nextActivityOverdue, leadStale }
 
+/// Lead priority from Odoo (drives the threshold modifier, §4.6.1).
+enum AlertPriority { high, medium, low }
+
+/// One transition in an alert's lifecycle (§3.4 state machine). The client
+/// renders these; the source of truth is server-side (workflow history) —
+/// Phase 3 API note: alert detail needs an event-history endpoint.
+enum AlertEventType { opened, acked, snoozed, reopened, escalated }
+
+class AlertEvent {
+  final AlertEventType type;
+  final DateTime at;
+
+  /// Snooze target — only set for [AlertEventType.snoozed].
+  final DateTime? until;
+
+  const AlertEvent(this.type, this.at, {this.until});
+}
+
 /// One lead-coverage alert (design screens 09/10), produced by the per-lead
 /// alert workflow (§3.4).
 class LeadAlert {
@@ -89,6 +107,19 @@ class LeadAlert {
   final AlertStatus status;
   final DateTime? snoozeUntil;
 
+  // Detail-screen context (design screen 10); stage/priority/lastCoveredAt
+  // come from Odoo at runtime and may be absent.
+  final String? stage;
+  final AlertPriority? priority;
+  final DateTime? lastCoveredAt;
+
+  /// When the escalation timer fires if not acknowledged (createdAt +
+  /// coverage_rule.escalate_after_days).
+  final DateTime? escalatesAt;
+
+  /// Lifecycle events, oldest first; history[0] is always `opened`.
+  final List<AlertEvent> history;
+
   const LeadAlert({
     required this.id,
     required this.leadTitle,
@@ -100,13 +131,23 @@ class LeadAlert {
     required this.createdAt,
     required this.status,
     this.snoozeUntil,
+    this.stage,
+    this.priority,
+    this.lastCoveredAt,
+    this.escalatesAt,
+    this.history = const [],
   });
 
   /// True when the alert still demands a decision (top section + badge).
   bool get needsAction =>
       status == AlertStatus.open || status == AlertStatus.escalated;
 
-  LeadAlert copyWith({AlertStatus? status, DateTime? snoozeUntil}) => LeadAlert(
+  LeadAlert copyWith({
+    AlertStatus? status,
+    DateTime? snoozeUntil,
+    List<AlertEvent>? history,
+  }) =>
+      LeadAlert(
         id: id,
         leadTitle: leadTitle,
         accountName: accountName,
@@ -117,6 +158,11 @@ class LeadAlert {
         createdAt: createdAt,
         status: status ?? this.status,
         snoozeUntil: snoozeUntil ?? this.snoozeUntil,
+        stage: stage,
+        priority: priority,
+        lastCoveredAt: lastCoveredAt,
+        escalatesAt: escalatesAt,
+        history: history ?? this.history,
       );
 }
 

@@ -101,6 +101,7 @@ class MockAlertsRepository implements AlertsRepository {
   late final List<LeadAlert> _alerts = () {
     final now = DateTime.now();
     return [
+      // The design-mock scenario (screen 10): open, no-visit, high priority.
       LeadAlert(
         id: 'a1',
         leadTitle: 'Q3 Fleet Renewal',
@@ -110,6 +111,11 @@ class MockAlertsRepository implements AlertsRepository {
         thresholdDays: 7,
         createdAt: now,
         status: AlertStatus.open,
+        stage: 'Negotiation',
+        priority: AlertPriority.high,
+        lastCoveredAt: now.subtract(const Duration(days: 9)),
+        escalatesAt: now.add(const Duration(days: 2)),
+        history: [AlertEvent(AlertEventType.opened, now)],
       ),
       LeadAlert(
         id: 'a2',
@@ -119,6 +125,13 @@ class MockAlertsRepository implements AlertsRepository {
         closeInDays: 12,
         createdAt: now.subtract(const Duration(days: 1)),
         status: AlertStatus.open,
+        stage: 'Proposal',
+        priority: AlertPriority.medium,
+        lastCoveredAt: now.subtract(const Duration(days: 5)),
+        escalatesAt: now.add(const Duration(days: 3)),
+        history: [
+          AlertEvent(AlertEventType.opened, now.subtract(const Duration(days: 1))),
+        ],
       ),
       LeadAlert(
         id: 'a3',
@@ -129,6 +142,13 @@ class MockAlertsRepository implements AlertsRepository {
         thresholdDays: 10,
         createdAt: now.subtract(const Duration(days: 2)),
         status: AlertStatus.ack,
+        stage: 'Won — delivery',
+        priority: AlertPriority.medium,
+        lastCoveredAt: now.subtract(const Duration(days: 12)),
+        history: [
+          AlertEvent(AlertEventType.opened, now.subtract(const Duration(days: 2))),
+          AlertEvent(AlertEventType.acked, now.subtract(const Duration(days: 1))),
+        ],
       ),
       LeadAlert(
         id: 'a4',
@@ -138,6 +158,35 @@ class MockAlertsRepository implements AlertsRepository {
         createdAt: now.subtract(const Duration(days: 3)),
         status: AlertStatus.snoozed,
         snoozeUntil: now.add(const Duration(days: 4)),
+        stage: 'Qualified',
+        priority: AlertPriority.low,
+        history: [
+          AlertEvent(AlertEventType.opened, now.subtract(const Duration(days: 3))),
+          AlertEvent(AlertEventType.snoozed, now.subtract(const Duration(days: 1)),
+              until: now.add(const Duration(days: 4))),
+        ],
+      ),
+      // Reopened after an expired snooze — exercises the full
+      // snooze -> reopened -> (ack) chain from the detail screen.
+      LeadAlert(
+        id: 'a5',
+        leadTitle: 'Warehouse Expansion',
+        accountName: 'Trident Foods',
+        reason: AlertReason.noVisitWindow,
+        daysSinceVisit: 11,
+        thresholdDays: 7,
+        createdAt: now.subtract(const Duration(days: 6)),
+        status: AlertStatus.open,
+        stage: 'Qualified',
+        priority: AlertPriority.low,
+        lastCoveredAt: now.subtract(const Duration(days: 11)),
+        escalatesAt: now.add(const Duration(days: 2)),
+        history: [
+          AlertEvent(AlertEventType.opened, now.subtract(const Duration(days: 6))),
+          AlertEvent(AlertEventType.snoozed, now.subtract(const Duration(days: 5)),
+              until: now.subtract(const Duration(days: 2))),
+          AlertEvent(AlertEventType.reopened, now.subtract(const Duration(days: 2))),
+        ],
       ),
     ];
   }();
@@ -158,12 +207,27 @@ class MockAlertsRepository implements AlertsRepository {
   }
 
   @override
-  Future<void> ack(String id) =>
-      _update(id, (a) => a.copyWith(status: AlertStatus.ack));
+  Future<void> ack(String id) => _update(
+      id,
+      (a) => a.copyWith(
+            status: AlertStatus.ack,
+            history: [
+              ...a.history,
+              AlertEvent(AlertEventType.acked, DateTime.now()),
+            ],
+          ));
 
   @override
   Future<void> snooze(String id, DateTime until) => _update(
-      id, (a) => a.copyWith(status: AlertStatus.snoozed, snoozeUntil: until));
+      id,
+      (a) => a.copyWith(
+            status: AlertStatus.snoozed,
+            snoozeUntil: until,
+            history: [
+              ...a.history,
+              AlertEvent(AlertEventType.snoozed, DateTime.now(), until: until),
+            ],
+          ));
 
   Future<void> _update(
       String id, LeadAlert Function(LeadAlert) transform) async {
