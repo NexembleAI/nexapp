@@ -3,7 +3,6 @@ import 'package:intl/intl.dart';
 
 import 'auth_service.dart';
 import 'l10n/app_localizations.dart';
-import 'theme.dart';
 import 'today_stats_row.dart';
 import 'today_visits_list.dart';
 import 'tracking_card.dart';
@@ -145,20 +144,21 @@ class _Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
+    // colorScheme.primary carries the design's per-mode primary
+    // (#356EDE light / #3B82F6 dark), matching the measured mock values.
+    final primary = Theme.of(context).colorScheme.primary;
     return Container(
       width: 40,
       height: 40,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: AppTheme.primary.withValues(alpha: 0.18),
+        color: primary.withValues(alpha: 0.18),
       ),
       alignment: Alignment.center,
       child: Text(
         initials,
         style: TextStyle(
-          // Lighter blue in dark mode for contrast against the dark tint.
-          color: dark ? const Color(0xFF3B82F6) : AppTheme.primary,
+          color: primary,
           fontWeight: FontWeight.w600,
           fontSize: 14,
         ),

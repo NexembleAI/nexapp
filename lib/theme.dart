@@ -6,6 +6,11 @@ abstract final class AppTheme {
   /// var(--primary) = oklch(0.5629 0.1817 262)
   static const Color primary = Color(0xFF356EDE);
 
+  /// Dark-mode primary, measured across the mocks (buttons, accents, dots
+  /// all render #3B82F6 in dark) — the design lightens primary for dark
+  /// surfaces rather than reusing the light value.
+  static const Color primaryDark = Color(0xFF3B82F6);
+
   // Spectrum gradient — brand accent ONLY (app icon, splash, login mark,
   // avatars, Home tracking-card glow). Never on ordinary buttons.
   static const Color spectrumMagenta = Color(0xFFB023F2);
@@ -41,17 +46,17 @@ abstract final class AppTheme {
   static ThemeData dark() => _theme(Brightness.dark);
 
   static ThemeData _theme(Brightness brightness) {
+    final dark = brightness == Brightness.dark;
+    final primaryColor = dark ? primaryDark : primary;
     final scheme = ColorScheme.fromSeed(
       seedColor: primary,
       brightness: brightness,
     ).copyWith(
-      // The design uses the same flat primary on buttons in BOTH modes
-      // (dark mode flips surfaces, not the primary), so pin it rather than
-      // letting fromSeed derive a pastel dark-mode primary.
-      primary: primary,
+      // Pin the design's per-mode primary rather than letting fromSeed
+      // derive a pastel dark-mode primary.
+      primary: primaryColor,
       onPrimary: Colors.white,
     );
-    final dark = brightness == Brightness.dark;
     final page = dark ? _pageDark : _pageLight;
     final card = dark ? _cardDark : _cardLight;
     return ThemeData(
@@ -76,7 +81,7 @@ abstract final class AppTheme {
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
             color: states.contains(WidgetState.selected)
-                ? primary
+                ? primaryColor
                 : scheme.onSurfaceVariant,
           ),
         ),
@@ -85,7 +90,7 @@ abstract final class AppTheme {
             fontSize: 12,
             fontWeight: FontWeight.w500,
             color: states.contains(WidgetState.selected)
-                ? primary
+                ? primaryColor
                 : scheme.onSurfaceVariant,
           ),
         ),
