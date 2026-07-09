@@ -71,6 +71,104 @@
     }
   },
   "reasonLeadStale": "Lead has gone stale",
+  "coverageAlertTitle": "Coverage alert",
+  "stageLabel": "Stage",
+  "priorityLabel": "Priority",
+  "lastCoveredLabel": "Last covered",
+  "priorityHigh": "High",
+  "priorityMedium": "Medium",
+  "priorityLow": "Low",
+  "acknowledgeButton": "Acknowledge",
+  "fileVisitReportFor": "File visit report for {name}",
+  "@fileVisitReportFor": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "timelineLabel": "Timeline",
+  "eventOpened": "Alert opened",
+  "eventOpenedDetail": "{when} — auto-generated",
+  "@eventOpenedDetail": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "eventAcked": "Acknowledged",
+  "eventSnoozed": "Snoozed",
+  "eventSnoozedUntil": "{when} · until {until}",
+  "@eventSnoozedUntil": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      },
+      "until": {
+        "type": "String"
+      }
+    }
+  },
+  "eventReopened": "Reopened — snooze expired",
+  "eventEscalated": "Escalated to manager",
+  "timelineAwaitingAction": "Awaiting action",
+  "timelineEscalatesIn": "Escalates to manager in {days} days",
+  "@timelineEscalatesIn": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "timelineAwaitingVisit": "Awaiting visit report",
+  "timelineEscalationPaused": "Escalation paused",
+  "timelineReopens": "Reopens {date}",
+  "@timelineReopens": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "calloutNoVisitTitle": "No visit in {days} days.",
+  "@calloutNoVisitTitle": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "calloutNoVisitBody": "Your coverage threshold for {priority}-priority leads is {threshold} days. File a visit to keep this deal on track.",
+  "@calloutNoVisitBody": {
+    "placeholders": {
+      "priority": {
+        "type": "String"
+      },
+      "threshold": {
+        "type": "int"
+      }
+    }
+  },
+  "calloutNoVisitBodyNoPriority": "Your coverage threshold is {threshold} days. File a visit to keep this deal on track.",
+  "@calloutNoVisitBodyNoPriority": {
+    "placeholders": {
+      "threshold": {
+        "type": "int"
+      }
+    }
+  },
+  "calloutOverdueTitle": "Next activity is overdue.",
+  "calloutOverdueBody": "The planned follow-up date has passed and this lead closes in {days} days. File a visit to keep this deal on track.",
+  "@calloutOverdueBody": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "calloutStaleTitle": "This lead is going stale.",
+  "calloutStaleBody": "No visit or activity has been recorded recently. File a visit to keep this deal on track.",
   "noAlerts": "No alerts",
   "alertsLoadError": "Couldn't load alerts",
   "visitsLabel": "Visits",
