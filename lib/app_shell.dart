@@ -65,25 +65,45 @@ class _AppShellState extends State<AppShell> {
 }
 
 /// Amber count badge on the Alerts tab (design: status semantics — warning),
-/// hidden while loading or when there are no open alerts.
-class _AlertsBadge extends StatelessWidget {
+/// hidden while loading or when there are no open alerts. Listens to
+/// [AlertsRepository.changes] so ack/snooze updates it live.
+class _AlertsBadge extends StatefulWidget {
   final Widget child;
 
   const _AlertsBadge({required this.child});
 
   @override
+  State<_AlertsBadge> createState() => _AlertsBadgeState();
+}
+
+class _AlertsBadgeState extends State<_AlertsBadge> {
+  int _count = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+    AlertsRepository.instance.changes.addListener(_refresh);
+  }
+
+  @override
+  void dispose() {
+    AlertsRepository.instance.changes.removeListener(_refresh);
+    super.dispose();
+  }
+
+  Future<void> _refresh() async {
+    final count = await AlertsRepository.instance.openAlertsCount();
+    if (mounted) setState(() => _count = count);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return FutureBuilder<int>(
-      future: AlertsRepository.instance.openAlertsCount(),
-      builder: (context, snapshot) {
-        final count = snapshot.data ?? 0;
-        return Badge.count(
-          count: count,
-          isLabelVisible: count > 0,
-          backgroundColor: AppTheme.warning,
-          child: child,
-        );
-      },
+    return Badge.count(
+      count: _count,
+      isLabelVisible: _count > 0,
+      backgroundColor: AppTheme.warning,
+      child: widget.child,
     );
   }
 }
