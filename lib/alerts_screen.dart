@@ -24,6 +24,13 @@ class _AlertsScreenState extends State<AlertsScreen> {
   void initState() {
     super.initState();
     _load();
+    AlertsRepository.instance.changes.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    AlertsRepository.instance.changes.removeListener(_load);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -33,6 +40,27 @@ class _AlertsScreenState extends State<AlertsScreen> {
     } catch (_) {
       if (mounted) setState(() => _error = true);
     }
+  }
+
+  /// Placeholder until snooze policy (duration/cap) is defined server-side —
+  /// the coverage_rule schema has no snooze columns yet (§4.6 gap).
+  static const _snoozeDuration = Duration(days: 3);
+
+  Future<void> _ack(LeadAlert a) => AlertsRepository.instance.ack(a.id);
+
+  Future<void> _snooze(LeadAlert a) =>
+      AlertsRepository.instance.snooze(a.id, DateTime.now().add(_snoozeDuration));
+
+  void _fileReport(LeadAlert a) {
+    // Opens visit capture (design screen 05) pre-targeted at this lead,
+    // once built.
+    final l = AppLocalizations.of(context)!;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(l.comingSoonMessage),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
@@ -61,7 +89,12 @@ class _AlertsScreenState extends State<AlertsScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           for (final a in needs) ...[
-            _NeedsActionCard(alert: a),
+            _NeedsActionCard(
+              alert: a,
+              onFileReport: () => _fileReport(a),
+              onSnooze: () => _snooze(a),
+              onAck: () => _ack(a),
+            ),
             const SizedBox(height: 12),
           ],
           if (earlier.isNotEmpty) ...[
@@ -122,8 +155,16 @@ String _accountLine(BuildContext context, LeadAlert alert) {
 
 class _NeedsActionCard extends StatelessWidget {
   final LeadAlert alert;
+  final VoidCallback onFileReport;
+  final VoidCallback onSnooze;
+  final VoidCallback onAck;
 
-  const _NeedsActionCard({required this.alert});
+  const _NeedsActionCard({
+    required this.alert,
+    required this.onFileReport,
+    required this.onSnooze,
+    required this.onAck,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -181,13 +222,13 @@ class _NeedsActionCard extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(horizontal: 18),
                             minimumSize: const Size(0, 38),
                           ),
-                          onPressed: () {}, // wired in the next step
+                          onPressed: onFileReport,
                           child: Text(l.fileReportButton),
                         ),
                         const SizedBox(width: 8),
-                        _PillButton(label: l.snoozeButton, onTap: () {}),
+                        _PillButton(label: l.snoozeButton, onTap: onSnooze),
                         const SizedBox(width: 8),
-                        _PillButton(label: l.ackButton, onTap: () {}),
+                        _PillButton(label: l.ackButton, onTap: onAck),
                       ],
                     ),
                   ],
