@@ -6,6 +6,7 @@ import 'l10n/app_localizations.dart';
 import 'today_stats_row.dart';
 import 'today_visits_list.dart';
 import 'tracking_card.dart';
+import 'visit_capture_screen.dart';
 
 /// Home tab (design screen 04): header (date, greeting, avatar), hero
 /// tracking card, today stats, visits list, and the file-a-report action.
@@ -83,11 +84,10 @@ class _HomeScreenState extends State<HomeScreen> {
               shadowColor: theme.colorScheme.shadow,
             ),
             onPressed: () {
-              // Opens the visit-capture screen (design screen 05) once built.
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(l.comingSoonMessage),
-                  duration: const Duration(seconds: 2),
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const VisitCaptureScreen(),
                 ),
               );
             },
