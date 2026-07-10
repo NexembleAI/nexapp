@@ -198,6 +198,8 @@
   "accuracyGood": "Good",
   "accuracyApprox": "Approximate",
   "tapToRecord": "Tap to record a voice note",
+  "recordingTapToStop": "Recording… tap to stop",
+  "microphonePermissionRequired": "Microphone permission is needed to record.",
   "submitReportButton": "Submit report",
   "noVisitsToday": "No visits yet today",
   "visitsLoadError": "Couldn't load today's visits",
