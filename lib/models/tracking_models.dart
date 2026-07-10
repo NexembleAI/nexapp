@@ -1,4 +1,93 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
+
+/// A CRM customer (account), sourced from Odoo at runtime via the platform.
+class Customer {
+  final String id;
+  final String name;
+  final String address;
+
+  const Customer({
+    required this.id,
+    required this.name,
+    required this.address,
+  });
+}
+
+/// A sales lead assigned to the current user, scoped to a customer.
+class Lead {
+  final String id;
+  final String title;
+  final String customerId;
+
+  const Lead({
+    required this.id,
+    required this.title,
+    required this.customerId,
+  });
+}
+
+/// Recorded audio attached to a draft (path is app-private, deleted after
+/// submission).
+class ReportAudio {
+  final String path;
+  final String mimeType; // audio/ogg;codecs=opus (Android) or audio/mp4 (iOS)
+  final Duration duration;
+  final int sizeBytes;
+
+  const ReportAudio({
+    required this.path,
+    required this.mimeType,
+    required this.duration,
+    required this.sizeBytes,
+  });
+}
+
+/// Position captured at report time (report_position, §4.4).
+class ReportPosition {
+  final double latitude;
+  final double longitude;
+  final double accuracyMeters;
+
+  const ReportPosition({
+    required this.latitude,
+    required this.longitude,
+    required this.accuracyMeters,
+  });
+}
+
+/// A visit report ready for submission (§3.3). Carries no user identity —
+/// the server resolves the author from the bearer token.
+class ReportDraft {
+  final String customerId;
+  final List<String> leadIds;
+  final String notes;
+  final ReportAudio? audio;
+  final ReportPosition? position;
+
+  /// Client-generated so a retried upload never duplicates server-side.
+  final String idempotencyKey;
+
+  const ReportDraft({
+    required this.customerId,
+    required this.leadIds,
+    required this.notes,
+    this.audio,
+    this.position,
+    required this.idempotencyKey,
+  });
+
+  /// Random 128-bit hex key from a CSPRNG — never derived from guessable
+  /// data.
+  static String newIdempotencyKey() {
+    final rand = Random.secure();
+    return List.generate(
+      16,
+      (_) => rand.nextInt(256).toRadixString(16).padLeft(2, '0'),
+    ).join();
+  }
+}
 
 /// Lifecycle of a visit report, client- and server-side states combined.
 /// queued/uploading exist only in the local offline queue (design screen 06);
@@ -95,6 +184,7 @@ class LeadAlert {
   final String id;
   final String leadTitle;
   final String accountName;
+  final String customerId; // lead_alert.customer_id (§4.6)
   final AlertReason reason;
 
   // Reason-line values from lead_alert.details; which ones are set depends
@@ -124,6 +214,7 @@ class LeadAlert {
     required this.id,
     required this.leadTitle,
     required this.accountName,
+    required this.customerId,
     required this.reason,
     this.daysSinceVisit,
     this.thresholdDays,
@@ -151,6 +242,7 @@ class LeadAlert {
         id: id,
         leadTitle: leadTitle,
         accountName: accountName,
+        customerId: customerId,
         reason: reason,
         daysSinceVisit: daysSinceVisit,
         thresholdDays: thresholdDays,

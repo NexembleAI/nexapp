@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../alerts_repository.dart';
+import '../customers_repository.dart';
 import '../models/tracking_models.dart';
 import '../reports_repository.dart';
 import '../tracking_repository.dart';
@@ -11,6 +12,52 @@ import '../tracking_repository.dart';
 ///
 /// Every method waits [_latency] so loading states are actually exercised.
 const _latency = Duration(milliseconds: 400);
+
+/// ChangeNotifier with a public notify — notifyListeners is protected.
+class _MockChanges extends ChangeNotifier {
+  void bump() => notifyListeners();
+}
+
+// Shared mock CRM data (single source for customers/leads/alerts/reports).
+// Lead-to-customer mapping follows the alert mocks; note the design mocks
+// are internally inconsistent here (screen 05 shows Q3 Fleet Renewal under
+// Meridian, screens 09/10 under Apex) — the alerts win.
+const _mockCustomers = [
+  Customer(id: 'c1', name: 'Meridian Logistics', address: '3400 Industrial Pkwy'),
+  Customer(id: 'c2', name: 'Apex Manufacturing', address: '78 Foundry Road'),
+  Customer(id: 'c3', name: 'Coastal Retail Group', address: '12 Harbourfront Ave'),
+  Customer(id: 'c4', name: 'Vanguard Pharma', address: '5 Science Park Drive'),
+  Customer(id: 'c5', name: 'Northwind Traders', address: '220 Market Street'),
+  Customer(id: 'c6', name: 'Trident Foods', address: '41 Cold Store Lane'),
+  Customer(id: 'c7', name: 'Harbor & Co.', address: '9 Quayside Walk'),
+  Customer(id: 'c8', name: 'Solstice Hospitality', address: '17 Grand Esplanade'),
+];
+
+const _mockLeads = [
+  Lead(id: 'l1', title: 'Q3 Fleet Renewal', customerId: 'c2'), // alert a1
+  Lead(id: 'l2', title: 'Annual Supply Contract', customerId: 'c3'), // a2
+  Lead(id: 'l3', title: 'POS Rollout', customerId: 'c7'), // a3
+  Lead(id: 'l4', title: 'Lead going stale', customerId: 'c8'), // a4
+  Lead(id: 'l5', title: 'Warehouse Expansion', customerId: 'c6'), // a5
+  Lead(id: 'l6', title: 'Telematics Add-on', customerId: 'c1'),
+  Lead(id: 'l7', title: 'Depot Automation Pilot', customerId: 'c1'),
+  Lead(id: 'l8', title: 'Cold-chain Monitoring', customerId: 'c4'),
+  // c5 Northwind deliberately has none — exercises the no-leads case.
+];
+
+class MockCustomersRepository implements CustomersRepository {
+  @override
+  Future<List<Customer>> myCustomers() async {
+    await Future.delayed(_latency);
+    return _mockCustomers;
+  }
+
+  @override
+  Future<List<Lead>> leadsForCustomer(String customerId) async {
+    await Future.delayed(_latency);
+    return _mockLeads.where((l) => l.customerId == customerId).toList();
+  }
+}
 
 class MockReportsRepository implements ReportsRepository {
   @override
@@ -41,9 +88,40 @@ class MockReportsRepository implements ReportsRepository {
     ];
   }
 
+  final _MockChanges _changes = _MockChanges();
+
+  @override
+  Listenable get changes => _changes;
+
+  late final List<ReportEntry> _reports = _seedReports();
+
   @override
   Future<List<ReportEntry>> reports() async {
     await Future.delayed(_latency);
+    return List.unmodifiable(_reports);
+  }
+
+  @override
+  Future<void> submitReport(ReportDraft draft) async {
+    await Future.delayed(_latency);
+    final customer =
+        _mockCustomers.where((c) => c.id == draft.customerId).firstOrNull;
+    _reports.insert(
+      0,
+      ReportEntry(
+        customerName: customer?.name ?? draft.customerId,
+        createdAt: DateTime.now(),
+        status: ReportStatus.queued,
+        hasAudio: draft.audio != null,
+        hasNotes: draft.notes.isNotEmpty,
+        // Manual FAB reports have no geofence session (§3.3).
+        geofencePresent: false,
+      ),
+    );
+    _changes.bump();
+  }
+
+  static List<ReportEntry> _seedReports() {
     final now = DateTime.now();
     DateTime daysAgo(int d, int h, int m) {
       final day = now.subtract(Duration(days: d));
@@ -95,7 +173,7 @@ class MockReportsRepository implements ReportsRepository {
 }
 
 class MockAlertsRepository implements AlertsRepository {
-  final _AlertChanges _changes = _AlertChanges();
+  final _MockChanges _changes = _MockChanges();
 
   // In-memory state so ack/snooze visibly move cards between sections.
   late final List<LeadAlert> _alerts = () {
@@ -106,6 +184,7 @@ class MockAlertsRepository implements AlertsRepository {
         id: 'a1',
         leadTitle: 'Q3 Fleet Renewal',
         accountName: 'Apex Manufacturing',
+        customerId: 'c2',
         reason: AlertReason.noVisitWindow,
         daysSinceVisit: 9,
         thresholdDays: 7,
@@ -121,6 +200,7 @@ class MockAlertsRepository implements AlertsRepository {
         id: 'a2',
         leadTitle: 'Annual Supply Contract',
         accountName: 'Coastal Retail Group',
+        customerId: 'c3',
         reason: AlertReason.nextActivityOverdue,
         closeInDays: 12,
         createdAt: now.subtract(const Duration(days: 1)),
@@ -137,6 +217,7 @@ class MockAlertsRepository implements AlertsRepository {
         id: 'a3',
         leadTitle: 'POS Rollout',
         accountName: 'Harbor & Co.',
+        customerId: 'c7',
         reason: AlertReason.noVisitWindow,
         daysSinceVisit: 12,
         thresholdDays: 10,
@@ -154,6 +235,7 @@ class MockAlertsRepository implements AlertsRepository {
         id: 'a4',
         leadTitle: 'Lead going stale',
         accountName: 'Solstice Hospitality',
+        customerId: 'c8',
         reason: AlertReason.leadStale,
         createdAt: now.subtract(const Duration(days: 3)),
         status: AlertStatus.snoozed,
@@ -172,6 +254,7 @@ class MockAlertsRepository implements AlertsRepository {
         id: 'a5',
         leadTitle: 'Warehouse Expansion',
         accountName: 'Trident Foods',
+        customerId: 'c6',
         reason: AlertReason.noVisitWindow,
         daysSinceVisit: 11,
         thresholdDays: 7,
@@ -238,11 +321,6 @@ class MockAlertsRepository implements AlertsRepository {
       _changes.bump();
     }
   }
-}
-
-/// ChangeNotifier with a public notify — notifyListeners is protected.
-class _AlertChanges extends ChangeNotifier {
-  void bump() => notifyListeners();
 }
 
 class MockTrackingRepository implements TrackingRepository {
