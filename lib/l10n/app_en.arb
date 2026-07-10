@@ -175,6 +175,30 @@
   "reportsLabel": "Reports",
   "todaysVisitsTitle": "Today's visits",
   "fileVisitReport": "File a visit report",
+  "newVisitReportTitle": "New visit report",
+  "customerLabel": "Customer",
+  "selectCustomerHint": "Select customer",
+  "searchCustomersHint": "Search customers",
+  "detectedPill": "Detected",
+  "leadsLabel": "Leads",
+  "advancingLeads": "{count, plural, one{Advancing {count} lead} other{Advancing {count} leads}}",
+  "@advancingLeads": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "addLeadChip": "Add lead",
+  "notesLabel": "Notes",
+  "notesHint": "Add notes about the visit…",
+  "locationLabel": "Location",
+  "gettingLocation": "Getting location…",
+  "locationUnavailable": "Location unavailable",
+  "accuracyGood": "Good",
+  "accuracyApprox": "Approximate",
+  "tapToRecord": "Tap to record a voice note",
+  "submitReportButton": "Submit report",
   "noVisitsToday": "No visits yet today",
   "visitsLoadError": "Couldn't load today's visits",
   "dwellMinutes": "{minutes} min dwell",

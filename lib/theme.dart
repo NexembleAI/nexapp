@@ -28,7 +28,10 @@ abstract final class AppTheme {
   static const Color _pageLight = Color(0xFFFAFBFF);
   static const Color _pageDark = Color(0xFF000114);
   static const Color _cardLight = Color(0xFFFFFFFF);
-  static const Color _cardDark = Color(0xFF02001F);
+  // Lifted above the mock's measured #02001F: that value is only ~11 units
+  // off the page and vanishes into it on OLED, so cards get a clearly
+  // elevated (still blue-tinted) surface for separation in dark mode.
+  static const Color _cardDark = Color(0xFF12152E);
 
   // NexUI muted-foreground for section labels, measured from the home mocks
   // (indigo-cast in light, neutral gray in dark). Stand-in until the real
