@@ -22,6 +22,17 @@ class AudioRecorderService {
   /// Prompts for mic permission on first call.
   Future<bool> hasPermission() => _recorder.hasPermission();
 
+  /// Friendly codec name for the size caption.
+  String get codecLabel => Platform.isIOS ? 'AAC' : 'Opus';
+
+  /// Live size of the in-progress file (for the recording caption).
+  Future<int> currentSizeBytes() async {
+    final p = _path;
+    if (p == null) return 0;
+    final f = File(p);
+    return await f.exists() ? f.length() : 0;
+  }
+
   static (RecordConfig, String ext, String mime) _configFor() {
     if (Platform.isIOS) {
       return (
