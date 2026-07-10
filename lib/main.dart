@@ -13,6 +13,7 @@ import 'geolocation_service.dart';
 import 'l10n/app_localizations.dart';
 import 'alerts_repository.dart';
 import 'app_shell.dart';
+import 'customers_repository.dart';
 import 'login_screen.dart';
 import 'mock/mock_repositories.dart'; // TODO(mock): remove with lib/mock/
 import 'nexemble_reveal.dart';
@@ -42,6 +43,7 @@ void main() async {
   ReportsRepository.instance = MockReportsRepository();
   AlertsRepository.instance = MockAlertsRepository();
   TrackingRepository.instance = MockTrackingRepository();
+  CustomersRepository.instance = MockCustomersRepository();
   runApp(const MainApp());
 }
 
