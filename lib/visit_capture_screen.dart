@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:record/record.dart';
 
 import 'audio_recorder_service.dart';
 import 'customers_repository.dart';
@@ -46,6 +49,11 @@ class _VisitCaptureScreenState extends State<VisitCaptureScreen> {
   String? _address;
   bool _fetchingPosition = true;
 
+  final AudioRecorderService _recorder = AudioRecorderService();
+  // Consumed by Submit (validation + draft) in the submit step.
+  // ignore: unused_field
+  ReportAudio? _audio;
+
   @override
   void initState() {
     super.initState();
@@ -59,6 +67,7 @@ class _VisitCaptureScreenState extends State<VisitCaptureScreen> {
   @override
   void dispose() {
     _notes.dispose();
+    _recorder.dispose();
     super.dispose();
   }
 
@@ -230,7 +239,10 @@ class _VisitCaptureScreenState extends State<VisitCaptureScreen> {
               ),
             ],
             const SizedBox(height: 20),
-            const _RecorderPlaceholder(),
+            _RecorderCard(
+              service: _recorder,
+              onChanged: (a) => setState(() => _audio = a),
+            ),
             const SizedBox(height: 20),
             sectionLabel(l.notesLabel),
             Card(
@@ -657,90 +669,300 @@ class _LeadSheetState extends State<_LeadSheet> {
   }
 }
 
-/// Integration-spike recorder: tap to record/stop, snackbar reports the
-/// result. Replaced by the full three-state card in the next step.
-class _RecorderPlaceholder extends StatefulWidget {
-  const _RecorderPlaceholder();
+enum _RecState { idle, recording, reviewing }
+
+/// Three-state voice-note recorder (design screen 05). Owns the timer, the
+/// amplitude subscription, and a 5-min cap; the parent owns the service and
+/// the resulting audio (for submit / discard).
+class _RecorderCard extends StatefulWidget {
+  final AudioRecorderService service;
+  final ValueChanged<ReportAudio?> onChanged;
+
+  const _RecorderCard({required this.service, required this.onChanged});
 
   @override
-  State<_RecorderPlaceholder> createState() => _RecorderPlaceholderState();
+  State<_RecorderCard> createState() => _RecorderCardState();
 }
 
-class _RecorderPlaceholderState extends State<_RecorderPlaceholder> {
-  final AudioRecorderService _service = AudioRecorderService();
-  bool _recording = false;
+class _RecorderCardState extends State<_RecorderCard> {
+  // Caps worst-case file size under the §4.4 10 MB ingest cap even at the
+  // inflated iOS-simulator bitrate (~130 kbps -> ~4.8 MB at 5 min).
+  static const _maxDuration = Duration(minutes: 5);
+  static const _barCount = 40;
+
+  _RecState _state = _RecState.idle;
+  final List<double> _levels = [];
+  Duration _elapsed = Duration.zero;
+  int _sizeBytes = 0;
+  Timer? _ticker;
+  StreamSubscription<Amplitude>? _ampSub;
 
   @override
   void dispose() {
-    _service.dispose();
+    _ticker?.cancel();
+    _ampSub?.cancel();
     super.dispose();
   }
 
-  Future<void> _toggle() async {
+  Future<void> _start() async {
     final l = AppLocalizations.of(context)!;
-    if (_recording) {
-      final audio = await _service.stop();
-      if (!mounted) return;
-      setState(() => _recording = false);
-      if (audio != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${audio.mimeType} · ${audio.sizeBytes} B · '
-                '${audio.duration.inSeconds}s'),
-          ),
-        );
-      }
-    } else {
-      final ok = await _service.start();
-      if (!mounted) return;
-      if (!ok) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l.microphonePermissionRequired)),
-        );
-        return;
-      }
-      setState(() => _recording = true);
+    final ok = await widget.service.start();
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l.microphonePermissionRequired)),
+      );
+      return;
     }
+    setState(() {
+      _state = _RecState.recording;
+      _levels.clear();
+      _elapsed = Duration.zero;
+      _sizeBytes = 0;
+    });
+    _ampSub = widget.service.amplitudeStream().listen(_onAmplitude);
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _onTick());
+  }
+
+  void _onAmplitude(Amplitude amp) {
+    if (!mounted) return;
+    setState(() {
+      _levels.add(_levelFromDb(amp.current));
+      if (_levels.length > _barCount) _levels.removeAt(0);
+    });
+  }
+
+  Future<void> _onTick() async {
+    final size = await widget.service.currentSizeBytes();
+    if (!mounted) return;
+    setState(() {
+      _elapsed += const Duration(seconds: 1);
+      _sizeBytes = size;
+    });
+    if (_elapsed >= _maxDuration) _stop();
+  }
+
+  Future<void> _stop() async {
+    await _ampSub?.cancel();
+    _ticker?.cancel();
+    final audio = await widget.service.stop();
+    if (!mounted) return;
+    setState(() => _state = _RecState.reviewing);
+    widget.onChanged(audio);
+  }
+
+  Future<void> _reRecord() async {
+    await widget.service.deleteFile();
+    if (!mounted) return;
+    setState(() {
+      _state = _RecState.idle;
+      _levels.clear();
+    });
+    widget.onChanged(null);
+  }
+
+  /// dBFS (0 = loudest, negative = quieter) -> 0..1, floored at -45 dB.
+  double _levelFromDb(double db) {
+    if (db.isNaN || db.isInfinite) return 0;
+    const minDb = -45.0;
+    return ((db - minDb) / -minDb).clamp(0.0, 1.0);
+  }
+
+  String _fmtDuration(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  String _fmtBytes(int b) {
+    if (b < 1024) return '$b B';
+    if (b < 1024 * 1024) return '${(b / 1024).round()} KB';
+    return '${(b / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
   @override
   Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context)!;
-    final theme = Theme.of(context);
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
+        padding: const EdgeInsets.all(20),
+        child: switch (_state) {
+          _RecState.idle => _buildIdle(context),
+          _RecState.recording => _buildRecording(context),
+          _RecState.reviewing => _buildReviewing(context),
+        },
+      ),
+    );
+  }
+
+  Widget _buildIdle(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        _circleButton(icon: Icons.mic, onTap: _start),
+        const SizedBox(height: 12),
+        Text(
+          l.tapToRecord,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecording(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            GestureDetector(
-              onTap: _toggle,
-              child: Container(
-                width: 72,
-                height: 72,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppTheme.recording,
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: AppTheme.recording,
+                    shape: BoxShape.circle,
+                  ),
                 ),
-                child: Icon(
-                  _recording ? Icons.stop : Icons.mic,
-                  color: Colors.white,
-                  size: 30,
+                const SizedBox(width: 8),
+                Text(
+                  l.recordingLabel,
+                  style: const TextStyle(
+                    color: AppTheme.recording,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
+              ],
             ),
-            const SizedBox(height: 12),
             Text(
-              _recording ? l.recordingTapToStop : l.tapToRecord,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+              _fmtDuration(_elapsed),
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 18,
+                fontFeatures: [FontFeature.tabularFigures()],
               ),
             ),
           ],
         ),
+        const SizedBox(height: 16),
+        _Waveform(levels: _levels),
+        const SizedBox(height: 16),
+        _circleButton(icon: Icons.stop, onTap: _stop),
+        const SizedBox(height: 10),
+        Text(
+          '${widget.service.codecLabel} · ${_fmtBytes(_sizeBytes)}',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildReviewing(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        const Icon(Icons.check_circle, color: AppTheme.success),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l.voiceNoteLabel,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${_fmtDuration(_elapsed)} · ${widget.service.codecLabel} · '
+                '${_fmtBytes(_sizeBytes)}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+        TextButton.icon(
+          onPressed: _reRecord,
+          icon: const Icon(Icons.refresh, size: 18),
+          label: Text(l.reRecordButton),
+        ),
+      ],
+    );
+  }
+
+  Widget _circleButton({required IconData icon, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 72,
+        height: 72,
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          color: AppTheme.recording,
+        ),
+        child: Icon(icon, color: Colors.white, size: 30),
       ),
     );
   }
+}
+
+/// Amplitude bars, oldest→newest, centered vertically.
+class _Waveform extends StatelessWidget {
+  final List<double> levels;
+
+  const _Waveform({required this.levels});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44,
+      width: double.infinity,
+      child: CustomPaint(
+        painter: _WaveformPainter(
+          levels: levels,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+      ),
+    );
+  }
+}
+
+class _WaveformPainter extends CustomPainter {
+  final List<double> levels;
+  final Color color;
+
+  _WaveformPainter({required this.levels, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (levels.isEmpty) return;
+    const gap = 3.0;
+    final n = levels.length;
+    final barW = ((size.width - gap * (n - 1)) / n).clamp(1.5, 5.0);
+    final paint = Paint()
+      ..color = color
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = barW;
+    final cy = size.height / 2;
+    for (var i = 0; i < n; i++) {
+      final h = levels[i].clamp(0.04, 1.0) * size.height;
+      final x = i * (barW + gap) + barW / 2;
+      canvas.drawLine(Offset(x, cy - h / 2), Offset(x, cy + h / 2), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WaveformPainter old) => true;
 }
 
 class _LocationCard extends StatelessWidget {
