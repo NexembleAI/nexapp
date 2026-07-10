@@ -25,6 +25,8 @@ dependencies:
   device_info_plus: ^11.1.0
   geolocator: ^13.0.0
   geocoding: ^3.0.0
+  record: ^6.0.0
+  path_provider: ^2.1.0
 
 dev_dependencies:
   flutter_test:

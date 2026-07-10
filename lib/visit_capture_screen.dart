@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
+import 'audio_recorder_service.dart';
 import 'customers_repository.dart';
 import 'entity_avatar.dart';
 import 'l10n/app_localizations.dart';
@@ -656,9 +657,51 @@ class _LeadSheetState extends State<_LeadSheet> {
   }
 }
 
-/// Idle-only visual until the recording step replaces it.
-class _RecorderPlaceholder extends StatelessWidget {
+/// Integration-spike recorder: tap to record/stop, snackbar reports the
+/// result. Replaced by the full three-state card in the next step.
+class _RecorderPlaceholder extends StatefulWidget {
   const _RecorderPlaceholder();
+
+  @override
+  State<_RecorderPlaceholder> createState() => _RecorderPlaceholderState();
+}
+
+class _RecorderPlaceholderState extends State<_RecorderPlaceholder> {
+  final AudioRecorderService _service = AudioRecorderService();
+  bool _recording = false;
+
+  @override
+  void dispose() {
+    _service.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggle() async {
+    final l = AppLocalizations.of(context)!;
+    if (_recording) {
+      final audio = await _service.stop();
+      if (!mounted) return;
+      setState(() => _recording = false);
+      if (audio != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${audio.mimeType} · ${audio.sizeBytes} B · '
+                '${audio.duration.inSeconds}s'),
+          ),
+        );
+      }
+    } else {
+      final ok = await _service.start();
+      if (!mounted) return;
+      if (!ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l.microphonePermissionRequired)),
+        );
+        return;
+      }
+      setState(() => _recording = true);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -670,18 +713,25 @@ class _RecorderPlaceholder extends StatelessWidget {
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppTheme.recording,
+            GestureDetector(
+              onTap: _toggle,
+              child: Container(
+                width: 72,
+                height: 72,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppTheme.recording,
+                ),
+                child: Icon(
+                  _recording ? Icons.stop : Icons.mic,
+                  color: Colors.white,
+                  size: 30,
+                ),
               ),
-              child: const Icon(Icons.mic, color: Colors.white, size: 30),
             ),
             const SizedBox(height: 12),
             Text(
-              l.tapToRecord,
+              _recording ? l.recordingTapToStop : l.tapToRecord,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
