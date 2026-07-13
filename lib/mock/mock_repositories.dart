@@ -72,6 +72,23 @@ class MockReportsRepository implements ReportsRepository {
     _changes.bump();
   }
 
+  /// Called by the uploader on success (mock-only): the uploaded report
+  /// becomes a server-side `submitted` report in history.
+  void addSubmitted(QueuedReport item) {
+    _reports.insert(
+      0,
+      ReportEntry(
+        customerName: item.customerName,
+        createdAt: DateTime.now(),
+        status: ReportStatus.submitted,
+        hasAudio: item.hasAudio,
+        hasNotes: item.hasNotes,
+        geofencePresent: false, // manual, no geofence session (§3.3)
+      ),
+    );
+    _changes.bump();
+  }
+
   @override
   Future<TodayStats> todayStats() async {
     await Future.delayed(_latency);

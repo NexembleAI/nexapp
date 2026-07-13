@@ -185,8 +185,25 @@
       }
     }
   },
-  "queueSavedBodyOnline": "Your {name} report is in the queue and uploading now.",
-  "@queueSavedBodyOnline": {
+  "queueUploadingBody": "Your {name} report is uploading now.",
+  "@queueUploadingBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "queueQueuedOnlineBody": "Your {name} report is in the queue and will upload shortly.",
+  "@queueQueuedOnlineBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "queueUploadedTitle": "Uploaded",
+  "queueUploadedBody": "Your {name} report has been uploaded.",
+  "@queueUploadedBody": {
     "placeholders": {
       "name": {
         "type": "String"

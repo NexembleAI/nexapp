@@ -126,7 +126,10 @@ class _VisitCaptureScreenState extends State<VisitCaptureScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => QueueConfirmationScreen(customerName: customerName),
+          builder: (_) => QueueConfirmationScreen(
+            customerName: customerName,
+            reportId: draft.idempotencyKey,
+          ),
         ),
       );
     } catch (_) {
