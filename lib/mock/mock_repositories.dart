@@ -60,10 +60,12 @@ class MockCustomersRepository implements CustomersRepository {
 }
 
 class MockReportsRepository implements ReportsRepository {
+  TodayStats _todayStats = const TodayStats(visits: 4, reports: 3);
+
   @override
   Future<TodayStats> todayStats() async {
     await Future.delayed(_latency);
-    return const TodayStats(visits: 4, reports: 3);
+    return _todayStats;
   }
 
   @override
@@ -117,6 +119,10 @@ class MockReportsRepository implements ReportsRepository {
         // Manual FAB reports have no geofence session (§3.3).
         geofencePresent: false,
       ),
+    );
+    _todayStats = TodayStats(
+      visits: _todayStats.visits,
+      reports: _todayStats.reports + 1,
     );
     _changes.bump();
   }
