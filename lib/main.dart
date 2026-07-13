@@ -24,6 +24,7 @@ import 'reports_repository.dart';
 import 'theme.dart';
 import 'tracking_repository.dart';
 import 'upload_queue.dart';
+import 'upload_uploader.dart';
 
 final messengerKey = GlobalKey<ScaffoldMessengerState>();
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -54,6 +55,14 @@ void main() async {
   AlertsRepository.instance = alertsMock;
   TrackingRepository.instance = MockTrackingRepository();
   CustomersRepository.instance = MockCustomersRepository();
+  // Uploader drains the queue while online. The POST and the server-reaction
+  // are injected simulations (deleted with lib/mock/ + replaced by real HTTP).
+  UploadUploader.instance.simulateUpload = (_) async => true;
+  UploadUploader.instance.onUploaded = (item) {
+    reportsMock.addSubmitted(item);
+    if (item.leadIds.isNotEmpty) alertsMock.resolveForLeads(item.leadIds);
+  };
+  UploadUploader.instance.start();
   runApp(const MainApp());
 }
 

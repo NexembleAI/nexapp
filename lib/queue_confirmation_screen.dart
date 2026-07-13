@@ -13,8 +13,13 @@ import 'upload_queue.dart';
 /// the capture screen.
 class QueueConfirmationScreen extends StatelessWidget {
   final String customerName;
+  final String reportId;
 
-  const QueueConfirmationScreen({super.key, required this.customerName});
+  const QueueConfirmationScreen({
+    super.key,
+    required this.customerName,
+    required this.reportId,
+  });
 
   void _backToHome(BuildContext context) {
     Navigator.of(context).popUntil((r) => r.isFirst);
@@ -73,43 +78,71 @@ class QueueConfirmationScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(24),
                 children: [
                   const SizedBox(height: 16),
-                  Center(
-                    child: Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: AppTheme.warning.withValues(alpha: 0.14),
-                      ),
-                      child: const Icon(
-                        Icons.cloud_upload_outlined,
-                        color: AppTheme.warning,
-                        size: 34,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    l.queueSavedTitle,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  // Copy reflects connectivity: "uploading now" vs "when you
-                  // reconnect".
+                  // Hero + copy react to both connectivity and whether this
+                  // report is still in the queue (it drains in seconds when
+                  // online, so "uploading now" would go stale otherwise).
                   ListenableBuilder(
-                    listenable: ConnectivityService.instance.changes,
-                    builder: (context, _) => Text(
-                      ConnectivityService.instance.isOnline
-                          ? l.queueSavedBodyOnline(customerName)
-                          : l.queueSavedBody(customerName),
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
+                    listenable: Listenable.merge([
+                      ConnectivityService.instance.changes,
+                      UploadQueue.instance.changes,
+                    ]),
+                    builder: (context, _) {
+                      final online = ConnectivityService.instance.isOnline;
+                      final items = UploadQueue.instance.items;
+                      final idx = items.indexWhere(
+                        (i) => i.idempotencyKey == reportId,
+                      );
+                      final done = idx < 0;
+                      final uploading =
+                          !done && items[idx].status == QueueStatus.uploading;
+                      final color = done ? AppTheme.success : AppTheme.warning;
+                      // Copy tracks THIS report's actual state, not just
+                      // connectivity — it may be queued behind others.
+                      final body = done
+                          ? l.queueUploadedBody(customerName)
+                          : uploading
+                              ? l.queueUploadingBody(customerName)
+                              : online
+                                  ? l.queueQueuedOnlineBody(customerName)
+                                  : l.queueSavedBody(customerName);
+                      return Column(
+                        children: [
+                          Center(
+                            child: Container(
+                              width: 72,
+                              height: 72,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: color.withValues(alpha: 0.14),
+                              ),
+                              child: Icon(
+                                done
+                                    ? Icons.check_circle_outline
+                                    : Icons.cloud_upload_outlined,
+                                color: color,
+                                size: 34,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            done ? l.queueUploadedTitle : l.queueSavedTitle,
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            body,
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 28),
                   // Live queue.

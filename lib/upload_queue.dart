@@ -25,6 +25,77 @@ class UploadQueue {
   Listenable get changes => _changes;
   List<QueuedReport> get items => List.unmodifiable(_items);
 
+  /// Oldest queued item (FIFO), or null.
+  QueuedReport? get nextPending {
+    QueuedReport? oldest;
+    for (final i in _items) {
+      if (i.status == QueueStatus.queued &&
+          (oldest == null || i.createdAt.isBefore(oldest.createdAt))) {
+        oldest = i;
+      }
+    }
+    return oldest;
+  }
+
+  Future<void> markUploading(String id) async {
+    _updateCache(
+      id,
+      (i) => i.copyWith(status: QueueStatus.uploading, progress: 0),
+    );
+    await _db!.update(
+      'upload_queue',
+      {'status': QueueStatus.uploading.name},
+      where: 'idempotency_key = ?',
+      whereArgs: [id],
+    );
+    _changes.bump();
+  }
+
+  /// In-memory only (progress isn't persisted).
+  void setProgress(String id, double p) {
+    _updateCache(id, (i) => i.copyWith(progress: p));
+    _changes.bump();
+  }
+
+  Future<void> markQueued(String id) async {
+    _updateCache(
+      id,
+      (i) => i.copyWith(status: QueueStatus.queued, progress: 0),
+    );
+    await _db!.update(
+      'upload_queue',
+      {'status': QueueStatus.queued.name},
+      where: 'idempotency_key = ?',
+      whereArgs: [id],
+    );
+    _changes.bump();
+  }
+
+  /// Removes the item (row + audio file) on success; returns it for the
+  /// uploader to hand to the server-reaction hook.
+  Future<QueuedReport?> markUploaded(String id) async {
+    final idx = _items.indexWhere((i) => i.idempotencyKey == id);
+    if (idx < 0) return null;
+    final item = _items.removeAt(idx);
+    await _db!.delete(
+      'upload_queue',
+      where: 'idempotency_key = ?',
+      whereArgs: [id],
+    );
+    if (item.audioPath != null) {
+      try {
+        await File(item.audioPath!).delete();
+      } catch (_) {}
+    }
+    _changes.bump();
+    return item;
+  }
+
+  void _updateCache(String id, QueuedReport Function(QueuedReport) t) {
+    final i = _items.indexWhere((r) => r.idempotencyKey == id);
+    if (i >= 0) _items[i] = t(_items[i]);
+  }
+
   Future<void> init() async {
     _db = await openDatabase(
       p.join(await getDatabasesPath(), 'upload_queue.db'),

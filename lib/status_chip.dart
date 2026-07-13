@@ -19,7 +19,10 @@ class StatusChip extends StatelessWidget {
       ReportStatus.ready => (AppTheme.success, l.statusReady),
       ReportStatus.transcribing => (AppTheme.warning, l.statusTranscribing),
       ReportStatus.queued => (AppTheme.warning, l.statusQueued),
-      ReportStatus.uploading => (AppTheme.warning, l.statusUploading),
+      ReportStatus.uploading => (
+        Theme.of(context).colorScheme.primary,
+        l.statusUploading,
+      ),
       ReportStatus.transcriptFailed =>
         (AppTheme.warning, l.statusTranscriptFailed),
       ReportStatus.submitted =>
