@@ -40,8 +40,13 @@ void main() async {
   await AuthService.instance.restore();
   // Data-source wiring: each line flips to a real implementation as its
   // backend lands; lib/mock/ is deleted with the last one.
-  ReportsRepository.instance = MockReportsRepository();
-  AlertsRepository.instance = MockAlertsRepository();
+  final reportsMock = MockReportsRepository();
+  final alertsMock = MockAlertsRepository();
+  // Simulate the server auto-resolving a lead's alert when a report tagged
+  // with that lead is filed (§3.4); the real backend does this and pushes it.
+  reportsMock.onReportSubmitted = alertsMock.resolveForLeads;
+  ReportsRepository.instance = reportsMock;
+  AlertsRepository.instance = alertsMock;
   TrackingRepository.instance = MockTrackingRepository();
   CustomersRepository.instance = MockCustomersRepository();
   runApp(const MainApp());

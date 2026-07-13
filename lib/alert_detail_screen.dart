@@ -45,21 +45,29 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
         DateTime.now().add(defaultSnoozeDuration),
       );
 
-  void _fileReport() {
+  Future<void> _fileReport() async {
     final alert = _alert;
-    if (alert != null) openCaptureForAlert(context, alert);
+    if (alert == null) return;
+    await openCaptureForAlert(context, alert);
+    if (mounted) _load(); // reflect an auto-resolve after returning
   }
 
   Future<void> _load() async {
     try {
       final alerts = await AlertsRepository.instance.alerts();
       final match = alerts.where((a) => a.id == widget.alertId).firstOrNull;
-      if (mounted) {
-        setState(() {
-          _alert = match;
-          _error = match == null;
-        });
+      if (!mounted) return;
+      // A resolved alert has left the inbox; close the detail if it's on top.
+      // (During submit the changes listener fires while capture is still on
+      // top — the isCurrent guard defers the pop to the post-return _load.)
+      if (match != null && match.status == AlertStatus.resolved) {
+        if (ModalRoute.of(context)?.isCurrent ?? false) Navigator.pop(context);
+        return;
       }
+      setState(() {
+        _alert = match;
+        _error = match == null;
+      });
     } catch (_) {
       if (mounted) setState(() => _error = true);
     }

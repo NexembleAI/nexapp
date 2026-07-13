@@ -62,6 +62,12 @@ class MockCustomersRepository implements CustomersRepository {
 class MockReportsRepository implements ReportsRepository {
   TodayStats _todayStats = const TodayStats(visits: 4, reports: 3);
 
+  /// Mock hook simulating the server auto-resolving a lead's alert when a
+  /// report tagged with that lead is filed (§3.4 tracking.visit.report.created).
+  /// Not on the interface — the real client never resolves alerts; the backend
+  /// does and pushes the update. Wired to the alerts mock in main.dart.
+  void Function(List<String> leadIds)? onReportSubmitted;
+
   @override
   Future<TodayStats> todayStats() async {
     await Future.delayed(_latency);
@@ -125,6 +131,7 @@ class MockReportsRepository implements ReportsRepository {
       reports: _todayStats.reports + 1,
     );
     _changes.bump();
+    if (draft.leadIds.isNotEmpty) onReportSubmitted?.call(draft.leadIds);
   }
 
   static List<ReportEntry> _seedReports() {
@@ -322,6 +329,21 @@ class MockAlertsRepository implements AlertsRepository {
               AlertEvent(AlertEventType.snoozed, DateTime.now(), until: until),
             ],
           ));
+
+  /// Mock-only: the workflow auto-resolving alerts whose lead was just
+  /// covered by a filed report (§3.4). Not on the interface — wired to the
+  /// reports mock in main.dart.
+  void resolveForLeads(List<String> leadIds) {
+    var changed = false;
+    for (var i = 0; i < _alerts.length; i++) {
+      final a = _alerts[i];
+      if (a.status != AlertStatus.resolved && leadIds.contains(a.leadId)) {
+        _alerts[i] = a.copyWith(status: AlertStatus.resolved);
+        changed = true;
+      }
+    }
+    if (changed) _changes.bump();
+  }
 
   Future<void> _update(
       String id, LeadAlert Function(LeadAlert) transform) async {
