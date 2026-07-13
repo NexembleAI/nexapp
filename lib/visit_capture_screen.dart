@@ -12,6 +12,7 @@ import 'customers_repository.dart';
 import 'entity_avatar.dart';
 import 'l10n/app_localizations.dart';
 import 'models/tracking_models.dart';
+import 'reports_repository.dart';
 import 'theme.dart';
 
 /// Visit-report capture (design screen 05). Entry contexts:
@@ -51,9 +52,9 @@ class _VisitCaptureScreenState extends State<VisitCaptureScreen> {
   bool _fetchingPosition = true;
 
   final AudioRecorderService _recorder = AudioRecorderService();
-  // Consumed by Submit (validation + draft) in the submit step.
-  // ignore: unused_field
   ReportAudio? _audio;
+  bool _submitting = false;
+  bool _isRecording = false;
 
   @override
   void initState() {
@@ -62,7 +63,109 @@ class _VisitCaptureScreenState extends State<VisitCaptureScreen> {
     _detected = widget.detected && widget.initialCustomer != null;
     _selectedLeadIds.addAll(widget.initialLeadIds);
     if (_customer != null) _loadLeads(_customer!.id);
+    _notes.addListener(_onChange);
     _fetchPosition();
+  }
+
+  void _onChange() {
+    if (mounted) setState(() {}); // re-evaluate Submit enablement
+  }
+
+  bool get _canSubmit =>
+      _customer != null &&
+      (_audio != null || _notes.text.trim().isNotEmpty) &&
+      !_submitting &&
+      !_isRecording; // can't submit mid-recording
+
+  bool get _hasUnsaved =>
+      _audio != null || _notes.text.trim().isNotEmpty || _isRecording;
+
+  Future<void> _submit() async {
+    if (_submitting) return;
+    final l = AppLocalizations.of(context)!;
+    // No-leads nudge only when the customer HAS taggable leads.
+    if (_leads.isNotEmpty && _selectedLeadIds.isEmpty) {
+      if (await _confirmNoLeads() != true) return;
+      if (!mounted) return;
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _submitting = true);
+    final draft = ReportDraft(
+      customerId: _customer!.id,
+      leadIds: _selectedLeadIds.toList(),
+      notes: _notes.text.trim(),
+      audio: _audio,
+      position: _position,
+      idempotencyKey: ReportDraft.newIdempotencyKey(),
+    );
+    try {
+      await ReportsRepository.instance.submitReport(draft);
+      // Temp audio is dropped by the recorder card's dispose on pop; the real
+      // queue would persist it first.
+      if (!mounted) return;
+      Navigator.pop(context);
+      messenger.showSnackBar(SnackBar(content: Text(l.reportSubmitted)));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      messenger.showSnackBar(SnackBar(content: Text(l.reportSubmitFailed)));
+    }
+  }
+
+  Future<void> _attemptClose() async {
+    if (!_hasUnsaved) {
+      Navigator.pop(context);
+      return;
+    }
+    if (await _confirmDiscard() == true && mounted) {
+      // The recorder card's dispose cancels an in-progress recording and
+      // drops the temp file when the route pops.
+      Navigator.pop(context);
+    }
+  }
+
+  Future<bool?> _confirmDiscard() {
+    final l = AppLocalizations.of(context)!;
+    return showDialog<bool>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: Text(l.discardReportTitle),
+            content: Text(l.discardReportMessage),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(l.cancelButton),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(l.discardButton),
+              ),
+            ],
+          ),
+    );
+  }
+
+  Future<bool?> _confirmNoLeads() {
+    final l = AppLocalizations.of(context)!;
+    return showDialog<bool>(
+      context: context,
+      builder:
+          (ctx) => AlertDialog(
+            title: Text(l.noLeadsTitle),
+            content: Text(l.noLeadsMessage),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(l.cancelButton),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(l.submitAnywayButton),
+              ),
+            ],
+          ),
+    );
   }
 
   @override
@@ -192,107 +295,126 @@ class _VisitCaptureScreenState extends State<VisitCaptureScreen> {
       ),
     );
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          l.newVisitReportTitle,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _attemptClose();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(
+            l.newVisitReportTitle,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
           ),
+          actions: [
+            IconButton(icon: const Icon(Icons.close), onPressed: _attemptClose),
+          ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.close),
-            onPressed: () => Navigator.pop(context), // discard guard: next step
-          ),
-        ],
-      ),
-      body: Scrollbar(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          children: [
-            sectionLabel(l.customerLabel),
-            _CustomerCard(
-              customer: _customer,
-              detected: _detected,
-              onTap: _pickCustomer,
-            ),
-            if (_customer != null && _leads.isNotEmpty) ...[
-              const SizedBox(height: 20),
-              sectionLabel(
-                _selectedLeadIds.isEmpty
-                    ? l.leadsLabel
-                    : l.advancingLeads(_selectedLeadIds.length),
+        body: Scrollbar(
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            children: [
+              sectionLabel(l.customerLabel),
+              _CustomerCard(
+                customer: _customer,
+                detected: _detected,
+                onTap: _pickCustomer,
               ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final lead in _leads)
-                    _LeadPill(
-                      lead: lead,
-                      selected: _selectedLeadIds.contains(lead.id),
-                      onTap: () => _toggleLead(lead),
-                    ),
-                  _AddLeadChip(onTap: _openLeadSheet),
-                ],
-              ),
-            ],
-            const SizedBox(height: 20),
-            _RecorderCard(
-              service: _recorder,
-              onChanged: (a) => setState(() => _audio = a),
-            ),
-            const SizedBox(height: 20),
-            sectionLabel(l.notesLabel),
-            Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 4,
+              if (_customer != null && _leads.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                sectionLabel(
+                  _selectedLeadIds.isEmpty
+                      ? l.leadsLabel
+                      : l.advancingLeads(_selectedLeadIds.length),
                 ),
-                child: TextField(
-                  controller: _notes,
-                  maxLines: 6,
-                  minLines: 3,
-                  inputFormatters: [
-                    LengthLimitingTextInputFormatter(_notesMaxLength),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final lead in _leads)
+                      _LeadPill(
+                        lead: lead,
+                        selected: _selectedLeadIds.contains(lead.id),
+                        onTap: () => _toggleLead(lead),
+                      ),
+                    _AddLeadChip(onTap: _openLeadSheet),
                   ],
-                  decoration: InputDecoration(
-                    hintText: l.notesHint,
-                    border: InputBorder.none,
+                ),
+              ],
+              const SizedBox(height: 20),
+              _RecorderCard(
+                // Stable key: the leads section inserts above this card when a
+                // customer is picked, shifting its position — without a key
+                // Flutter would rebuild it by index and lose the recording.
+                key: const ValueKey('recorder'),
+                service: _recorder,
+                onChanged: (a) => setState(() => _audio = a),
+                onRecordingChanged: (v) => setState(() => _isRecording = v),
+              ),
+              const SizedBox(height: 20),
+              sectionLabel(l.notesLabel),
+              Card(
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 4,
+                  ),
+                  child: TextField(
+                    controller: _notes,
+                    maxLines: 6,
+                    minLines: 3,
+                    inputFormatters: [
+                      LengthLimitingTextInputFormatter(_notesMaxLength),
+                    ],
+                    decoration: InputDecoration(
+                      hintText: l.notesHint,
+                      border: InputBorder.none,
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 20),
-            sectionLabel(l.locationLabel),
-            _LocationCard(
-              position: _position,
-              address: _address,
-              fetching: _fetchingPosition,
-              onRefresh: _fetchPosition,
-            ),
-          ],
+              const SizedBox(height: 20),
+              sectionLabel(l.locationLabel),
+              _LocationCard(
+                position: _position,
+                address: _address,
+                fetching: _fetchingPosition,
+                onRefresh: _fetchPosition,
+              ),
+            ],
+          ),
         ),
-      ),
-      // Ride above the keyboard: Scaffold doesn't apply the IME inset to
-      // bottomNavigationBar, so the keyboard would cover the Submit button.
-      bottomNavigationBar: Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: FilledButton(
-                onPressed: null, // enabled with validation in the submit step
-                child: Text(l.submitReportButton),
+        // Ride above the keyboard: Scaffold doesn't apply the IME inset to
+        // bottomNavigationBar, so the keyboard would cover the Submit button.
+        bottomNavigationBar: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: FilledButton(
+                  onPressed: _canSubmit ? _submit : null,
+                  child:
+                      _submitting
+                          ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                          : Text(l.submitReportButton),
+                ),
               ),
             ),
           ),
@@ -614,10 +736,11 @@ class _DashedPillBorder extends CustomPainter {
       Offset.zero & size,
       Radius.circular(radius),
     );
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = _strokeWidth;
+    final paint =
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = _strokeWidth;
     for (final metric in (Path()..addRRect(rrect)).computeMetrics()) {
       var dist = 0.0;
       while (dist < metric.length) {
@@ -679,7 +802,16 @@ class _RecorderCard extends StatefulWidget {
   final AudioRecorderService service;
   final ValueChanged<ReportAudio?> onChanged;
 
-  const _RecorderCard({required this.service, required this.onChanged});
+  /// Fires true while actively recording so the parent can treat it as
+  /// unsaved (discard warning) and block submit.
+  final ValueChanged<bool> onRecordingChanged;
+
+  const _RecorderCard({
+    super.key,
+    required this.service,
+    required this.onChanged,
+    required this.onRecordingChanged,
+  });
 
   @override
   State<_RecorderCard> createState() => _RecorderCardState();
@@ -713,6 +845,13 @@ class _RecorderCardState extends State<_RecorderCard> {
     _posSub?.cancel();
     _stateSub?.cancel();
     _player?.dispose();
+    // Single cleanup authority however the card is torn down (incl. an
+    // abandoned mid-recording close): stop the mic + drop the temp file.
+    if (_state == _RecState.recording) {
+      widget.service.cancel();
+    } else if (_state == _RecState.reviewing) {
+      widget.service.deleteFile();
+    }
     super.dispose();
   }
 
@@ -721,9 +860,9 @@ class _RecorderCardState extends State<_RecorderCard> {
     final ok = await widget.service.start();
     if (!mounted) return;
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.microphonePermissionRequired)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.microphonePermissionRequired)));
       return;
     }
     setState(() {
@@ -732,6 +871,7 @@ class _RecorderCardState extends State<_RecorderCard> {
       _elapsed = Duration.zero;
       _sizeBytes = 0;
     });
+    widget.onRecordingChanged(true);
     _ampSub = widget.service.amplitudeStream().listen(_onAmplitude);
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _onTick());
   }
@@ -760,6 +900,7 @@ class _RecorderCardState extends State<_RecorderCard> {
     final audio = await widget.service.stop();
     if (!mounted) return;
     _audio = audio;
+    widget.onRecordingChanged(false);
     if (audio != null) await _initPlayer(audio);
     if (!mounted) return;
     setState(() => _state = _RecState.reviewing);
@@ -961,18 +1102,21 @@ class _RecorderCardState extends State<_RecorderCard> {
               child: SliderTheme(
                 data: SliderTheme.of(context).copyWith(
                   trackHeight: 3,
-                  thumbShape:
-                      const RoundSliderThumbShape(enabledThumbRadius: 6),
-                  overlayShape:
-                      const RoundSliderOverlayShape(overlayRadius: 12),
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 6,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 12,
+                  ),
                 ),
                 child: Slider(
                   value: totalMs == 0 ? 0 : posMs.toDouble(),
                   max: totalMs == 0 ? 1 : totalMs.toDouble(),
-                  onChanged: totalMs == 0
-                      ? null
-                      : (v) =>
-                          _player?.seek(Duration(milliseconds: v.round())),
+                  onChanged:
+                      totalMs == 0
+                          ? null
+                          : (v) =>
+                              _player?.seek(Duration(milliseconds: v.round())),
                 ),
               ),
             ),
@@ -1055,10 +1199,11 @@ class _WaveformPainter extends CustomPainter {
     const gap = 3.0;
     final n = levels.length;
     final barW = ((size.width - gap * (n - 1)) / n).clamp(1.5, 5.0);
-    final paint = Paint()
-      ..color = color
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = barW;
+    final paint =
+        Paint()
+          ..color = color
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = barW;
     final cy = size.height / 2;
     for (var i = 0; i < n; i++) {
       final h = levels[i].clamp(0.04, 1.0) * size.height;

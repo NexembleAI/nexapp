@@ -31,6 +31,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
   void initState() {
     super.initState();
     _load();
+    ReportsRepository.instance.changes.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    ReportsRepository.instance.changes.removeListener(_load);
+    super.dispose();
   }
 
   Future<void> _load() async {

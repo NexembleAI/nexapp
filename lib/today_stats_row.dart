@@ -28,13 +28,16 @@ class _TodayStatsRowState extends State<TodayStatsRow> {
     super.initState();
     _loadStats();
     _loadAlerts();
-    // Keep the Alerts tile in sync with ack/snooze from the Alerts tab.
+    // Keep the Alerts tile in sync with ack/snooze from the Alerts tab, and
+    // the Reports tile in sync with a newly submitted report.
     AlertsRepository.instance.changes.addListener(_loadAlerts);
+    ReportsRepository.instance.changes.addListener(_loadStats);
   }
 
   @override
   void dispose() {
     AlertsRepository.instance.changes.removeListener(_loadAlerts);
+    ReportsRepository.instance.changes.removeListener(_loadStats);
     super.dispose();
   }
 
