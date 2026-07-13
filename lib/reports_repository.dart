@@ -9,8 +9,8 @@ abstract class ReportsRepository {
   /// Assigned once at startup (main.dart): mock now, Nexcore-backed later.
   static late ReportsRepository instance;
 
-  /// Notifies when the report list changes (e.g. after [submitReport]) — the
-  /// Reports tab and Home listen to stay current.
+  /// Notifies when the report list changes (e.g. when an upload completes) —
+  /// the Reports tab and Home listen to stay current.
   Listenable get changes;
 
   Future<TodayStats> todayStats();
@@ -20,8 +20,4 @@ abstract class ReportsRepository {
   /// Full report history, newest first. The real implementation merges the
   /// server list with the local offline upload queue (queued/uploading rows).
   Future<List<ReportEntry>> reports();
-
-  /// Submits a report. Mock appends a queued row; the real implementation
-  /// hands the draft to the durable offline upload queue (design screen 06).
-  Future<void> submitReport(ReportDraft draft);
 }

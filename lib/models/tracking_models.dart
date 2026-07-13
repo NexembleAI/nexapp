@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -87,6 +88,112 @@ class ReportDraft {
       (_) => rand.nextInt(256).toRadixString(16).padLeft(2, '0'),
     ).join();
   }
+}
+
+enum QueueStatus { queued, uploading, failed }
+
+/// A visit report in the local durable upload queue (§2.3.3). PK is the
+/// draft's idempotencyKey. `progress` is in-memory only (not persisted).
+class QueuedReport {
+  final String idempotencyKey;
+  final String customerId;
+  final String customerName; // denormalized for offline display
+  final List<String> leadIds;
+  final String notes;
+  final double? latitude;
+  final double? longitude;
+  final double? accuracyMeters;
+  final String? audioPath;
+  final String? audioMime;
+  final int? audioDurationMs;
+  final int? audioSizeBytes;
+  final QueueStatus status;
+  final int attemptCount;
+  final DateTime createdAt;
+  final double progress;
+
+  const QueuedReport({
+    required this.idempotencyKey,
+    required this.customerId,
+    required this.customerName,
+    required this.leadIds,
+    required this.notes,
+    this.latitude,
+    this.longitude,
+    this.accuracyMeters,
+    this.audioPath,
+    this.audioMime,
+    this.audioDurationMs,
+    this.audioSizeBytes,
+    required this.status,
+    this.attemptCount = 0,
+    required this.createdAt,
+    this.progress = 0,
+  });
+
+  bool get hasAudio => audioPath != null;
+  bool get hasNotes => notes.isNotEmpty;
+
+  QueuedReport copyWith({
+    QueueStatus? status,
+    int? attemptCount,
+    double? progress,
+    String? audioPath,
+  }) =>
+      QueuedReport(
+        idempotencyKey: idempotencyKey,
+        customerId: customerId,
+        customerName: customerName,
+        leadIds: leadIds,
+        notes: notes,
+        latitude: latitude,
+        longitude: longitude,
+        accuracyMeters: accuracyMeters,
+        audioPath: audioPath ?? this.audioPath,
+        audioMime: audioMime,
+        audioDurationMs: audioDurationMs,
+        audioSizeBytes: audioSizeBytes,
+        status: status ?? this.status,
+        attemptCount: attemptCount ?? this.attemptCount,
+        createdAt: createdAt,
+        progress: progress ?? this.progress,
+      );
+
+  Map<String, Object?> toMap() => {
+        'idempotency_key': idempotencyKey,
+        'customer_id': customerId,
+        'customer_name': customerName,
+        'lead_ids': jsonEncode(leadIds),
+        'notes': notes,
+        'latitude': latitude,
+        'longitude': longitude,
+        'accuracy': accuracyMeters,
+        'audio_path': audioPath,
+        'audio_mime': audioMime,
+        'audio_duration_ms': audioDurationMs,
+        'audio_size_bytes': audioSizeBytes,
+        'status': status.name,
+        'attempt_count': attemptCount,
+        'created_at': createdAt.millisecondsSinceEpoch,
+      };
+
+  factory QueuedReport.fromMap(Map<String, Object?> m) => QueuedReport(
+        idempotencyKey: m['idempotency_key'] as String,
+        customerId: m['customer_id'] as String,
+        customerName: m['customer_name'] as String,
+        leadIds: (jsonDecode(m['lead_ids'] as String) as List).cast<String>(),
+        notes: m['notes'] as String,
+        latitude: m['latitude'] as double?,
+        longitude: m['longitude'] as double?,
+        accuracyMeters: m['accuracy'] as double?,
+        audioPath: m['audio_path'] as String?,
+        audioMime: m['audio_mime'] as String?,
+        audioDurationMs: m['audio_duration_ms'] as int?,
+        audioSizeBytes: m['audio_size_bytes'] as int?,
+        status: QueueStatus.values.byName(m['status'] as String),
+        attemptCount: m['attempt_count'] as int,
+        createdAt: DateTime.fromMillisecondsSinceEpoch(m['created_at'] as int),
+      );
 }
 
 /// Lifecycle of a visit report, client- and server-side states combined.

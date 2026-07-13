@@ -62,11 +62,15 @@ class MockCustomersRepository implements CustomersRepository {
 class MockReportsRepository implements ReportsRepository {
   TodayStats _todayStats = const TodayStats(visits: 4, reports: 3);
 
-  /// Mock hook simulating the server auto-resolving a lead's alert when a
-  /// report tagged with that lead is filed (§3.4 tracking.visit.report.created).
-  /// Not on the interface — the real client never resolves alerts; the backend
-  /// does and pushes the update. Wired to the alerts mock in main.dart.
-  void Function(List<String> leadIds)? onReportSubmitted;
+  /// Called on enqueue (via UploadQueue.onEnqueued) — a filed report counts
+  /// toward today's Reports even before it uploads.
+  void bumpTodayReports() {
+    _todayStats = TodayStats(
+      visits: _todayStats.visits,
+      reports: _todayStats.reports + 1,
+    );
+    _changes.bump();
+  }
 
   @override
   Future<TodayStats> todayStats() async {
@@ -107,31 +111,6 @@ class MockReportsRepository implements ReportsRepository {
   Future<List<ReportEntry>> reports() async {
     await Future.delayed(_latency);
     return List.unmodifiable(_reports);
-  }
-
-  @override
-  Future<void> submitReport(ReportDraft draft) async {
-    await Future.delayed(_latency);
-    final customer =
-        _mockCustomers.where((c) => c.id == draft.customerId).firstOrNull;
-    _reports.insert(
-      0,
-      ReportEntry(
-        customerName: customer?.name ?? draft.customerId,
-        createdAt: DateTime.now(),
-        status: ReportStatus.queued,
-        hasAudio: draft.audio != null,
-        hasNotes: draft.notes.isNotEmpty,
-        // Manual FAB reports have no geofence session (§3.3).
-        geofencePresent: false,
-      ),
-    );
-    _todayStats = TodayStats(
-      visits: _todayStats.visits,
-      reports: _todayStats.reports + 1,
-    );
-    _changes.bump();
-    if (draft.leadIds.isNotEmpty) onReportSubmitted?.call(draft.leadIds);
   }
 
   static List<ReportEntry> _seedReports() {

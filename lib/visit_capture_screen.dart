@@ -12,8 +12,8 @@ import 'customers_repository.dart';
 import 'entity_avatar.dart';
 import 'l10n/app_localizations.dart';
 import 'models/tracking_models.dart';
-import 'reports_repository.dart';
 import 'theme.dart';
+import 'upload_queue.dart';
 
 /// Opens capture pre-filled for an alert: its customer (resolved for the
 /// address) and its lead pre-tagged. No "Detected" pill — an alert entry is
@@ -119,9 +119,7 @@ class _VisitCaptureScreenState extends State<VisitCaptureScreen> {
       idempotencyKey: ReportDraft.newIdempotencyKey(),
     );
     try {
-      await ReportsRepository.instance.submitReport(draft);
-      // Temp audio is dropped by the recorder card's dispose on pop; the real
-      // queue would persist it first.
+      await UploadQueue.instance.enqueue(draft, customerName: _customer!.name);
       if (!mounted) return;
       Navigator.pop(context);
       messenger.showSnackBar(SnackBar(content: Text(l.reportSubmitted)));
