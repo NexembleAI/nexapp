@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import 'alert_detail_screen.dart';
 import 'alerts_repository.dart';
+import 'visit_capture_screen.dart';
 import 'l10n/app_localizations.dart';
 import 'models/tracking_models.dart';
 import 'theme.dart';
@@ -58,15 +59,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
   }
 
   void _fileReport(LeadAlert a) {
-    // Opens visit capture (design screen 05) pre-targeted at this lead,
-    // once built.
-    final l = AppLocalizations.of(context)!;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(l.comingSoonMessage),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    openCaptureForAlert(context, a);
   }
 
   @override

@@ -182,6 +182,7 @@ class AlertEvent {
 /// alert workflow (§3.4).
 class LeadAlert {
   final String id;
+  final String leadId; // lead_alert.lead_id (§4.6)
   final String leadTitle;
   final String accountName;
   final String customerId; // lead_alert.customer_id (§4.6)
@@ -212,6 +213,7 @@ class LeadAlert {
 
   const LeadAlert({
     required this.id,
+    required this.leadId,
     required this.leadTitle,
     required this.accountName,
     required this.customerId,
@@ -240,6 +242,7 @@ class LeadAlert {
   }) =>
       LeadAlert(
         id: id,
+        leadId: leadId,
         leadTitle: leadTitle,
         accountName: accountName,
         customerId: customerId,
