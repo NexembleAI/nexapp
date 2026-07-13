@@ -22,6 +22,7 @@ import 'registration_gate.dart';
 import 'reports_repository.dart';
 import 'theme.dart';
 import 'tracking_repository.dart';
+import 'upload_queue.dart';
 
 final messengerKey = GlobalKey<ScaffoldMessengerState>();
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -30,6 +31,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   await Preferences.init();
+  await UploadQueue.instance.init();
   await GeolocationService.tracker.init(Preferences.buildConfig());
   // init() is idempotent and won't update an already-installed native config on
   // an upgraded install, so push the current Preferences to the SDK (covers the
@@ -42,9 +44,10 @@ void main() async {
   // backend lands; lib/mock/ is deleted with the last one.
   final reportsMock = MockReportsRepository();
   final alertsMock = MockAlertsRepository();
-  // Simulate the server auto-resolving a lead's alert when a report tagged
-  // with that lead is filed (§3.4); the real backend does this and pushes it.
-  reportsMock.onReportSubmitted = alertsMock.resolveForLeads;
+  // A filed report enqueues into the durable upload queue; bump the
+  // today-Reports stat on enqueue. Auto-resolve happens on upload success
+  // (wired to the uploader in a later step), not here.
+  UploadQueue.instance.onEnqueued = (_) => reportsMock.bumpTodayReports();
   ReportsRepository.instance = reportsMock;
   AlertsRepository.instance = alertsMock;
   TrackingRepository.instance = MockTrackingRepository();
