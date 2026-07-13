@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:record/record.dart';
 
 import 'audio_recorder_service.dart';
@@ -697,10 +698,21 @@ class _RecorderCardState extends State<_RecorderCard> {
   Timer? _ticker;
   StreamSubscription<Amplitude>? _ampSub;
 
+  ReportAudio? _audio;
+  AudioPlayer? _player;
+  StreamSubscription<Duration>? _posSub;
+  StreamSubscription<PlayerState>? _stateSub;
+  Duration _pos = Duration.zero;
+  Duration _total = Duration.zero;
+  bool _playing = false;
+
   @override
   void dispose() {
     _ticker?.cancel();
     _ampSub?.cancel();
+    _posSub?.cancel();
+    _stateSub?.cancel();
+    _player?.dispose();
     super.dispose();
   }
 
@@ -747,16 +759,71 @@ class _RecorderCardState extends State<_RecorderCard> {
     _ticker?.cancel();
     final audio = await widget.service.stop();
     if (!mounted) return;
+    _audio = audio;
+    if (audio != null) await _initPlayer(audio);
+    if (!mounted) return;
     setState(() => _state = _RecState.reviewing);
     widget.onChanged(audio);
   }
 
+  Future<void> _initPlayer(ReportAudio audio) async {
+    final player = AudioPlayer();
+    _player = player;
+    try {
+      _total = await player.setFilePath(audio.path) ?? audio.duration;
+    } catch (_) {
+      _total = audio.duration;
+    }
+    _posSub = player.positionStream.listen((p) {
+      if (mounted) setState(() => _pos = p);
+    });
+    _stateSub = player.playerStateStream.listen((s) {
+      if (!mounted) return;
+      // On completion, reset to the start rather than leaving it at the end.
+      if (s.processingState == ProcessingState.completed) {
+        player.pause();
+        player.seek(Duration.zero);
+        setState(() {
+          _playing = false;
+          _pos = Duration.zero;
+        });
+      } else {
+        setState(() => _playing = s.playing);
+      }
+    });
+  }
+
+  Future<void> _togglePlay() async {
+    final p = _player;
+    if (p == null) return;
+    if (_playing) {
+      await p.pause();
+    } else {
+      if (_total > Duration.zero && _pos >= _total) await p.seek(Duration.zero);
+      await p.play();
+    }
+  }
+
+  Future<void> _disposePlayer() async {
+    await _posSub?.cancel();
+    await _stateSub?.cancel();
+    _posSub = null;
+    _stateSub = null;
+    await _player?.dispose();
+    _player = null;
+    _pos = Duration.zero;
+    _total = Duration.zero;
+    _playing = false;
+  }
+
   Future<void> _reRecord() async {
+    await _disposePlayer();
     await widget.service.deleteFile();
     if (!mounted) return;
     setState(() {
       _state = _RecState.idle;
       _levels.clear();
+      _audio = null;
     });
     widget.onChanged(null);
   }
@@ -868,33 +935,72 @@ class _RecorderCardState extends State<_RecorderCard> {
   Widget _buildReviewing(BuildContext context) {
     final l = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
-    return Row(
+    final totalMs = _total.inMilliseconds;
+    final posMs = _pos.inMilliseconds.clamp(0, totalMs == 0 ? 0 : totalMs);
+
+    return Column(
       children: [
-        const Icon(Icons.check_circle, color: AppTheme.success),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l.voiceNoteLabel,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                '${_fmtDuration(_elapsed)} · ${widget.service.codecLabel} · '
-                '${_fmtBytes(_sizeBytes)}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+        Row(
+          children: [
+            GestureDetector(
+              onTap: _togglePlay,
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: theme.colorScheme.primary,
+                ),
+                child: Icon(
+                  _playing ? Icons.pause : Icons.play_arrow,
+                  color: Colors.white,
                 ),
               ),
-            ],
-          ),
+            ),
+            Expanded(
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 3,
+                  thumbShape:
+                      const RoundSliderThumbShape(enabledThumbRadius: 6),
+                  overlayShape:
+                      const RoundSliderOverlayShape(overlayRadius: 12),
+                ),
+                child: Slider(
+                  value: totalMs == 0 ? 0 : posMs.toDouble(),
+                  max: totalMs == 0 ? 1 : totalMs.toDouble(),
+                  onChanged: totalMs == 0
+                      ? null
+                      : (v) =>
+                          _player?.seek(Duration(milliseconds: v.round())),
+                ),
+              ),
+            ),
+            Text(
+              '${_fmtDuration(_pos)} / ${_fmtDuration(_total)}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
         ),
-        TextButton.icon(
-          onPressed: _reRecord,
-          icon: const Icon(Icons.refresh, size: 18),
-          label: Text(l.reRecordButton),
+        Row(
+          children: [
+            Text(
+              '${widget.service.codecLabel} · '
+              '${_fmtBytes(_audio?.sizeBytes ?? _sizeBytes)}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: _reRecord,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: Text(l.reRecordButton),
+            ),
+          ],
         ),
       ],
     );
