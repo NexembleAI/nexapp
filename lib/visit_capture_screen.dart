@@ -15,6 +15,26 @@ import 'models/tracking_models.dart';
 import 'reports_repository.dart';
 import 'theme.dart';
 
+/// Opens capture pre-filled for an alert: its customer (resolved for the
+/// address) and its lead pre-tagged. No "Detected" pill — an alert entry is
+/// intent, not a geofence match.
+Future<void> openCaptureForAlert(BuildContext context, LeadAlert alert) async {
+  final customers = await CustomersRepository.instance.myCustomers();
+  final customer =
+      customers.where((c) => c.id == alert.customerId).firstOrNull ??
+          Customer(id: alert.customerId, name: alert.accountName, address: '');
+  if (!context.mounted) return;
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => VisitCaptureScreen(
+        initialCustomer: customer,
+        initialLeadIds: [alert.leadId],
+      ),
+    ),
+  );
+}
+
 /// Visit-report capture (design screen 05). Entry contexts:
 /// - Home FAB: nothing pre-filled — the user picks the customer.
 /// - Alert "File report": [initialCustomer] + [initialLeadIds] pre-set.

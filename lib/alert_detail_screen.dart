@@ -5,6 +5,7 @@ import 'alerts_repository.dart';
 import 'l10n/app_localizations.dart';
 import 'models/tracking_models.dart';
 import 'theme.dart';
+import 'visit_capture_screen.dart';
 
 /// Alert detail (design screen 10): summary card with Odoo meta, per-reason
 /// amber callout, lifecycle timeline, and pinned status-dependent actions
@@ -45,15 +46,8 @@ class _AlertDetailScreenState extends State<AlertDetailScreen> {
       );
 
   void _fileReport() {
-    // Opens visit capture (design screen 05) pre-targeted at this lead,
-    // once built.
-    final l = AppLocalizations.of(context)!;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(l.comingSoonMessage),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    final alert = _alert;
+    if (alert != null) openCaptureForAlert(context, alert);
   }
 
   Future<void> _load() async {

@@ -188,6 +188,7 @@ class MockAlertsRepository implements AlertsRepository {
       // The design-mock scenario (screen 10): open, no-visit, high priority.
       LeadAlert(
         id: 'a1',
+        leadId: 'l1',
         leadTitle: 'Q3 Fleet Renewal',
         accountName: 'Apex Manufacturing',
         customerId: 'c2',
@@ -204,6 +205,7 @@ class MockAlertsRepository implements AlertsRepository {
       ),
       LeadAlert(
         id: 'a2',
+        leadId: 'l2',
         leadTitle: 'Annual Supply Contract',
         accountName: 'Coastal Retail Group',
         customerId: 'c3',
@@ -221,6 +223,7 @@ class MockAlertsRepository implements AlertsRepository {
       ),
       LeadAlert(
         id: 'a3',
+        leadId: 'l3',
         leadTitle: 'POS Rollout',
         accountName: 'Harbor & Co.',
         customerId: 'c7',
@@ -239,6 +242,7 @@ class MockAlertsRepository implements AlertsRepository {
       ),
       LeadAlert(
         id: 'a4',
+        leadId: 'l4',
         leadTitle: 'Lead going stale',
         accountName: 'Solstice Hospitality',
         customerId: 'c8',
@@ -258,6 +262,7 @@ class MockAlertsRepository implements AlertsRepository {
       // snooze -> reopened -> (ack) chain from the detail screen.
       LeadAlert(
         id: 'a5',
+        leadId: 'l5',
         leadTitle: 'Warehouse Expansion',
         accountName: 'Trident Foods',
         customerId: 'c6',
