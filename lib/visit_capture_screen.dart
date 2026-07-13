@@ -24,7 +24,7 @@ Future<void> openCaptureForAlert(BuildContext context, LeadAlert alert) async {
       customers.where((c) => c.id == alert.customerId).firstOrNull ??
           Customer(id: alert.customerId, name: alert.accountName, address: '');
   if (!context.mounted) return;
-  Navigator.push(
+  await Navigator.push(
     context,
     MaterialPageRoute(
       builder: (_) => VisitCaptureScreen(
