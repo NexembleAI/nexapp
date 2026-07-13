@@ -175,6 +175,28 @@
   "reportsLabel": "Reports",
   "todaysVisitsTitle": "Today's visits",
   "fileVisitReport": "File a visit report",
+  "offlineBanner": "Offline — your report is saved and will sync",
+  "queueSavedTitle": "Saved — will upload",
+  "queueSavedBody": "Your {name} report is in the queue. Nexapp uploads it automatically when you reconnect.",
+  "@queueSavedBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "queueSavedBodyOnline": "Your {name} report is in the queue and uploading now.",
+  "@queueSavedBodyOnline": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "uploadQueueLabel": "Upload queue",
+  "queueEmpty": "Nothing in the queue",
+  "backToHomeButton": "Back to Home",
+  "viewAllReportsButton": "View all reports",
   "newVisitReportTitle": "New visit report",
   "customerLabel": "Customer",
   "selectCustomerHint": "Select customer",

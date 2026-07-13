@@ -12,6 +12,7 @@ import 'customers_repository.dart';
 import 'entity_avatar.dart';
 import 'l10n/app_localizations.dart';
 import 'models/tracking_models.dart';
+import 'queue_confirmation_screen.dart';
 import 'theme.dart';
 import 'upload_queue.dart';
 
@@ -119,10 +120,15 @@ class _VisitCaptureScreenState extends State<VisitCaptureScreen> {
       idempotencyKey: ReportDraft.newIdempotencyKey(),
     );
     try {
-      await UploadQueue.instance.enqueue(draft, customerName: _customer!.name);
+      final customerName = _customer!.name;
+      await UploadQueue.instance.enqueue(draft, customerName: customerName);
       if (!mounted) return;
-      Navigator.pop(context);
-      messenger.showSnackBar(SnackBar(content: Text(l.reportSubmitted)));
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => QueueConfirmationScreen(customerName: customerName),
+        ),
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() => _submitting = false);

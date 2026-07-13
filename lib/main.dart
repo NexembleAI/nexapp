@@ -9,6 +9,7 @@ import 'package:traccar_client/quick_actions.dart';
 
 import 'auth_service.dart';
 import 'configuration_service.dart';
+import 'connectivity_service.dart';
 import 'geolocation_service.dart';
 import 'l10n/app_localizations.dart';
 import 'alerts_repository.dart';
@@ -32,6 +33,7 @@ void main() async {
   await Firebase.initializeApp();
   await Preferences.init();
   await UploadQueue.instance.init();
+  await ConnectivityService.instance.init();
   await GeolocationService.tracker.init(Preferences.buildConfig());
   // init() is idempotent and won't update an already-installed native config on
   // an upgraded install, so push the current Preferences to the SDK (covers the
