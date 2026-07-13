@@ -8,6 +8,10 @@ import 'reports_screen.dart';
 import 'settings_screen.dart';
 import 'theme.dart';
 
+/// Request the shell switch tabs (e.g. "View all reports" / "Back to Home"
+/// from the queue screen). 0=Home 1=Reports 2=Alerts 3=Settings.
+final ValueNotifier<int?> shellTabRequest = ValueNotifier<int?>(null);
+
 /// Bottom-tab shell from the design handoff (Global navigation): Home,
 /// Reports, Alerts, Settings. IndexedStack keeps each tab's state alive
 /// across switches.
@@ -20,6 +24,26 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    shellTabRequest.addListener(_onTabRequest);
+  }
+
+  @override
+  void dispose() {
+    shellTabRequest.removeListener(_onTabRequest);
+    super.dispose();
+  }
+
+  void _onTabRequest() {
+    final i = shellTabRequest.value;
+    if (i != null && mounted) {
+      setState(() => _index = i);
+      shellTabRequest.value = null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
