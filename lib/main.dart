@@ -18,6 +18,7 @@ import 'customers_repository.dart';
 import 'login_screen.dart';
 import 'mock/mock_repositories.dart'; // TODO(mock): remove with lib/mock/
 import 'nexemble_reveal.dart';
+import 'onboarding_screen.dart';
 import 'preferences.dart';
 import 'registration_gate.dart';
 import 'reports_repository.dart';
@@ -146,14 +147,46 @@ class AuthGate extends StatelessWidget {
         if (signedIn != true) {
           return const LoginScreen();
         }
-        return const RegistrationGate(
-          child: Stack(
-            children: [
-              QuickActionsInitializer(),
-              AppShell(),
-            ],
+        return OnboardingGate(
+          child: const RegistrationGate(
+            child: Stack(
+              children: [
+                QuickActionsInitializer(),
+                AppShell(),
+              ],
+            ),
           ),
         );
+      },
+    );
+  }
+}
+
+/// Shows the first-run permission wizard (design screen 03) until it's been
+/// completed or skipped, then renders [child]. Gated on a persisted flag so it
+/// only appears once.
+class OnboardingGate extends StatefulWidget {
+  final Widget child;
+  const OnboardingGate({super.key, required this.child});
+
+  @override
+  State<OnboardingGate> createState() => _OnboardingGateState();
+}
+
+class _OnboardingGateState extends State<OnboardingGate> {
+  late bool _done =
+      Preferences.instance.getBool(Preferences.onboardingComplete) == true;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_done) return widget.child;
+    return OnboardingScreen(
+      onFinish: () async {
+        await Preferences.instance.setBool(
+          Preferences.onboardingComplete,
+          true,
+        );
+        if (mounted) setState(() => _done = true);
       },
     );
   }
