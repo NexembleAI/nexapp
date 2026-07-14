@@ -6,7 +6,9 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'auth_service.dart';
 import 'entity_avatar.dart';
+import 'geolocation_service.dart';
 import 'l10n/app_localizations.dart';
+import 'preferences.dart';
 import 'theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -25,12 +27,21 @@ class _SettingsScreenState extends State<SettingsScreen>
   bool _notificationsGranted = false;
   bool _batteryOk = false;
 
+  // Tracking config (SDK config, persisted in Preferences).
+  String _accuracy = 'high';
+  int _distance = 25;
+  int _interval = 60;
+
+  static const _distancePresets = [10, 25, 50, 100];
+  static const _intervalPresets = [10, 30, 60, 300];
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadUser();
     _loadPermissions();
+    _loadTracking();
   }
 
   @override
@@ -100,6 +111,50 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   Future<void> _fixBattery() => Permission.ignoreBatteryOptimizations.request();
 
+  void _loadTracking() {
+    setState(() {
+      _accuracy = Preferences.instance.getString(Preferences.accuracy) ?? 'high';
+      _distance = Preferences.instance.getInt(Preferences.distance) ?? 25;
+      _interval = Preferences.instance.getInt(Preferences.interval) ?? 60;
+    });
+  }
+
+  Future<void> _setAccuracy(String v) async {
+    setState(() => _accuracy = v);
+    await Preferences.instance.setString(Preferences.accuracy, v);
+    await GeolocationService.tracker.setConfig(Preferences.buildConfig());
+  }
+
+  Future<void> _setDistance(int v) async {
+    setState(() => _distance = v);
+    await Preferences.instance.setInt(Preferences.distance, v);
+    await GeolocationService.tracker.setConfig(Preferences.buildConfig());
+  }
+
+  Future<void> _setInterval(int v) async {
+    setState(() => _interval = v);
+    await Preferences.instance.setInt(Preferences.interval, v);
+    await GeolocationService.tracker.setConfig(Preferences.buildConfig());
+  }
+
+  // Display-only: if a stored value isn't a preset (e.g. a deep-link override),
+  // highlight the nearest segment; ties break to the larger value. Storage is
+  // untouched until the user actually taps a segment.
+  static int _nearestPreset(int v, List<int> presets) {
+    var best = presets.first;
+    var bestDiff = (v - best).abs();
+    for (final p in presets.skip(1)) {
+      final d = (v - p).abs();
+      if (d < bestDiff || (d == bestDiff && p > best)) {
+        best = p;
+        bestDiff = d;
+      }
+    }
+    return best;
+  }
+
+  static String _humanInterval(int s) => s < 300 ? '$s s' : '${s ~/ 60} min';
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
@@ -113,6 +168,19 @@ class _SettingsScreenState extends State<SettingsScreen>
           color: AppTheme.mutedLabel(theme.brightness),
           fontWeight: FontWeight.w600,
           letterSpacing: 0.8,
+        ),
+      ),
+    );
+
+    final controlLabelStyle = theme.textTheme.bodyMedium?.copyWith(
+      fontWeight: FontWeight.w600,
+    );
+    Widget helpText(String text) => Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Text(
+        text,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: AppTheme.mutedLabel(theme.brightness),
         ),
       ),
     );
@@ -161,6 +229,59 @@ class _SettingsScreenState extends State<SettingsScreen>
                   ),
                 ],
               ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          sectionLabel(l.trackingSectionLabel),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(l.accuracyLabel, style: controlLabelStyle),
+                  helpText(l.accuracyHelp),
+                  const SizedBox(height: 10),
+                  _SegmentedControl<String>(
+                    options: [
+                      ('highest', l.accuracyHigh),
+                      ('high', l.accuracyBalanced),
+                      ('medium', l.accuracyBatterySaver),
+                    ],
+                    selected: _accuracy,
+                    onChanged: _setAccuracy,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(l.distanceLabel, style: controlLabelStyle),
+                  helpText(l.distanceHelp),
+                  const SizedBox(height: 10),
+                  _SegmentedControl<int>(
+                    options: [for (final m in _distancePresets) (m, '$m m')],
+                    selected: _distancePresets.contains(_distance)
+                        ? _distance
+                        : _nearestPreset(_distance, _distancePresets),
+                    onChanged: _setDistance,
+                  ),
+                  // Update interval is only meaningful on High accuracy.
+                  if (_accuracy == 'highest') ...[
+                    const SizedBox(height: 16),
+                    Text(l.intervalLabel, style: controlLabelStyle),
+                    helpText(l.intervalHelp),
+                    const SizedBox(height: 10),
+                    _SegmentedControl<int>(
+                      options: [
+                        for (final s in _intervalPresets)
+                          (s, _humanInterval(s)),
+                      ],
+                      selected: _intervalPresets.contains(_interval)
+                          ? _interval
+                          : _nearestPreset(_interval, _intervalPresets),
+                      onChanged: _setInterval,
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ],
@@ -345,6 +466,74 @@ class _PermissionRow extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
               ),
               child: Text(l.fixButton),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A rounded segmented (single-choice) control matching the app tokens.
+class _SegmentedControl<T> extends StatelessWidget {
+  final List<(T, String)> options;
+  final T selected;
+  final ValueChanged<T> onChanged;
+
+  const _SegmentedControl({
+    required this.options,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(AppTheme.controlRadius),
+      ),
+      child: Row(
+        children: [
+          for (final (value, label) in options)
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onChanged(value),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    // Raised "thumb": near-white in light, near-dark in dark.
+                    color: value == selected
+                        ? theme.scaffoldBackgroundColor
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(
+                      AppTheme.controlRadius - 3,
+                    ),
+                    boxShadow: value == selected
+                        ? [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.12),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Text(
+                    label,
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: value == selected
+                          ? theme.colorScheme.primary
+                          : AppTheme.mutedLabel(theme.brightness),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
             ),
         ],
       ),
