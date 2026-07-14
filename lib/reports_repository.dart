@@ -20,4 +20,15 @@ abstract class ReportsRepository {
   /// Full report history, newest first. The real implementation merges the
   /// server list with the local offline upload queue (queued/uploading rows).
   Future<List<ReportEntry>> reports();
+
+  /// Full report for the detail screen (design screen 08).
+  Future<ReportDetail> reportDetail(String id);
+
+  /// Persists edited notes / lead tags — bumps version + appends audit
+  /// entries (§4.4, §4.4.2).
+  Future<void> updateReport(
+    String id, {
+    required String notes,
+    required List<String> leadIds,
+  });
 }

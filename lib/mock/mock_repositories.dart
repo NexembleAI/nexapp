@@ -31,6 +31,7 @@ const _mockCustomers = [
   Customer(id: 'c6', name: 'Trident Foods', address: '41 Cold Store Lane'),
   Customer(id: 'c7', name: 'Harbor & Co.', address: '9 Quayside Walk'),
   Customer(id: 'c8', name: 'Solstice Hospitality', address: '17 Grand Esplanade'),
+  Customer(id: 'c9', name: 'Brightwell Foods', address: '88 Cold Storage Way'),
 ];
 
 const _mockLeads = [
@@ -42,6 +43,8 @@ const _mockLeads = [
   Lead(id: 'l6', title: 'Telematics Add-on', customerId: 'c1'),
   Lead(id: 'l7', title: 'Depot Automation Pilot', customerId: 'c1'),
   Lead(id: 'l8', title: 'Cold-chain Monitoring', customerId: 'c4'),
+  Lead(id: 'l9', title: 'Cold-chain Upgrade', customerId: 'c9'), // report r2
+  Lead(id: 'l10', title: 'Refrigeration Retrofit', customerId: 'c9'),
   // c5 Northwind deliberately has none — exercises the no-leads case.
 ];
 
@@ -75,15 +78,23 @@ class MockReportsRepository implements ReportsRepository {
   /// Called by the uploader on success (mock-only): the uploaded report
   /// becomes a server-side `submitted` report in history.
   void addSubmitted(QueuedReport item) {
-    _reports.insert(
+    _records.insert(
       0,
-      ReportEntry(
+      ReportDetail(
+        id: item.idempotencyKey,
+        customerId: item.customerId,
         customerName: item.customerName,
         createdAt: DateTime.now(),
         status: ReportStatus.submitted,
-        hasAudio: item.hasAudio,
-        hasNotes: item.hasNotes,
         geofencePresent: false, // manual, no geofence session (§3.3)
+        notes: item.notes,
+        audioPresent: item.hasAudio,
+        audioDurationS: item.audioDurationMs == null
+            ? null
+            : (item.audioDurationMs! / 1000).round(),
+        audioMime: item.audioMime,
+        leadIds: item.leadIds,
+        version: 1,
       ),
     );
     _changes.bump();
@@ -122,15 +133,75 @@ class MockReportsRepository implements ReportsRepository {
   @override
   Listenable get changes => _changes;
 
-  late final List<ReportEntry> _reports = _seedReports();
+  late final List<ReportDetail> _records = _seedRecords();
 
   @override
   Future<List<ReportEntry>> reports() async {
     await Future.delayed(_latency);
-    return List.unmodifiable(_reports);
+    return _records.map(_entry).toList();
   }
 
-  static List<ReportEntry> _seedReports() {
+  ReportEntry _entry(ReportDetail d) => ReportEntry(
+        id: d.id,
+        customerName: d.customerName,
+        createdAt: d.createdAt,
+        dwell: d.dwell,
+        status: d.status,
+        hasAudio: d.audioPresent,
+        hasNotes: d.notes.isNotEmpty,
+        geofencePresent: d.geofencePresent,
+      );
+
+  @override
+  Future<ReportDetail> reportDetail(String id) async {
+    await Future.delayed(_latency);
+    return _records.firstWhere((r) => r.id == id);
+  }
+
+  @override
+  Future<void> updateReport(
+    String id, {
+    required String notes,
+    required List<String> leadIds,
+  }) async {
+    await Future.delayed(_latency);
+    final i = _records.indexWhere((r) => r.id == id);
+    if (i < 0) return;
+    final r = _records[i];
+    final edits = [...r.edits];
+    var version = r.version;
+    final now = DateTime.now();
+    // One audit entry per changed field, each bumping the version (§4.4.2).
+    if (notes != r.notes) {
+      version += 1;
+      edits.add(ReportEdit(
+        version: version,
+        field: ReportEditField.textBody,
+        editedAt: now,
+      ));
+    }
+    if (!_sameLeads(leadIds, r.leadIds)) {
+      version += 1;
+      edits.add(ReportEdit(
+        version: version,
+        field: ReportEditField.leadTags,
+        editedAt: now,
+      ));
+    }
+    _records[i] = r.copyWith(
+      notes: notes,
+      leadIds: leadIds,
+      version: version,
+      edits: edits,
+    );
+    _changes.bump();
+  }
+
+  static bool _sameLeads(List<String> a, List<String> b) =>
+      a.toSet().length == b.toSet().length &&
+      a.toSet().containsAll(b.toSet());
+
+  static List<ReportDetail> _seedRecords() {
     final now = DateTime.now();
     DateTime daysAgo(int d, int h, int m) {
       final day = now.subtract(Duration(days: d));
@@ -138,44 +209,96 @@ class MockReportsRepository implements ReportsRepository {
     }
 
     return [
-      ReportEntry(
+      ReportDetail(
+        id: 'r1',
+        customerId: 'c1',
         customerName: 'Meridian Logistics',
         createdAt: daysAgo(0, 12, 4),
-        status: ReportStatus.queued, // local queue: no session dwell yet
-        hasAudio: true,
-        hasNotes: true,
+        dwell: const Duration(minutes: 24),
+        status: ReportStatus.ready,
+        geofencePresent: true,
+        transcript: 'Walked the depot with the ops lead. They want to expand '
+            'the fleet pilot to two more routes next quarter.',
+        notes: 'Follow up on the telematics add-on pricing.',
+        audioPresent: true,
+        audioDurationS: 142,
+        audioMime: 'audio/ogg; codecs=opus',
+        leadIds: const ['l6'],
+        version: 1,
       ),
-      ReportEntry(
+      // The design-mock report (screen 08): edited twice, v3.
+      ReportDetail(
+        id: 'r2',
+        customerId: 'c9',
         customerName: 'Brightwell Foods',
         createdAt: daysAgo(0, 9, 45),
         dwell: const Duration(minutes: 18),
         status: ReportStatus.ready,
-        hasAudio: true,
-        hasNotes: false,
+        geofencePresent: true,
+        transcript: 'Met with the procurement lead at Brightwell. They '
+            'confirmed the cold-chain upgrade budget is approved for Q3 and '
+            'want a revised quote covering two additional sites by Friday…',
+        notes: 'Send revised quote covering the Riverside + Eastgate sites '
+            'before Friday. Loop in finance on the lease-vs-buy option.',
+        audioPresent: true,
+        audioDurationS: 168,
+        audioMime: 'audio/ogg; codecs=opus',
+        leadIds: const ['l9'],
+        version: 3,
+        edits: [
+          ReportEdit(
+            version: 2,
+            field: ReportEditField.textBody,
+            editedAt: daysAgo(0, 10, 15),
+          ),
+          ReportEdit(
+            version: 3,
+            field: ReportEditField.textBody,
+            editedAt: daysAgo(0, 11, 2),
+          ),
+        ],
       ),
-      ReportEntry(
+      ReportDetail(
+        id: 'r3',
+        customerId: 'c2',
         customerName: 'Apex Manufacturing',
         createdAt: daysAgo(1, 14, 10),
         dwell: const Duration(minutes: 31),
         status: ReportStatus.transcribing,
-        hasAudio: true,
-        hasNotes: true,
+        geofencePresent: true,
+        notes: 'Discussed the Q3 fleet renewal timeline.',
+        audioPresent: true,
+        audioDurationS: 205,
+        audioMime: 'audio/ogg; codecs=opus',
+        leadIds: const ['l1'],
+        version: 1,
       ),
-      ReportEntry(
+      ReportDetail(
+        id: 'r4',
+        customerId: 'c4',
         customerName: 'Vanguard Pharma',
         createdAt: daysAgo(2, 16, 30),
         status: ReportStatus.submitted,
-        hasAudio: false,
-        hasNotes: true,
         geofencePresent: false,
+        notes: 'Ad-hoc visit — no site geofence. Reviewed cold-chain '
+            'monitoring options.',
+        audioPresent: false,
+        leadIds: const ['l8'],
+        version: 1,
       ),
-      ReportEntry(
+      ReportDetail(
+        id: 'r5',
+        customerId: 'c5',
         customerName: 'Northwind Traders',
         createdAt: daysAgo(11, 11, 5),
         dwell: const Duration(minutes: 22),
         status: ReportStatus.ready,
-        hasAudio: false,
-        hasNotes: true,
+        geofencePresent: true,
+        transcript: 'Quarterly check-in. Nothing urgent; renewal on track.',
+        notes: 'No action needed this cycle.',
+        audioPresent: false,
+        leadIds: const [],
+        version: 1,
       ),
     ];
   }

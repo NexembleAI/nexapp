@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'entity_avatar.dart';
 import 'l10n/app_localizations.dart';
 import 'models/tracking_models.dart';
+import 'report_detail_screen.dart';
 import 'reports_repository.dart';
 import 'status_chip.dart';
 import 'theme.dart';
@@ -57,16 +58,46 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   void _toggle(_ReportFilter f) => setState(() {
-        if (!_active.remove(f)) _active.add(f);
-      });
+    if (!_active.remove(f)) _active.add(f);
+  });
+
+  /// Server reports open the detail; queued/uploading rows aren't yet
+  /// editable (mid-upload) — show a dialog instead.
+  void _openReport(BuildContext context, ReportEntry r) {
+    final l = AppLocalizations.of(context)!;
+    if (r.status == ReportStatus.queued || r.status == ReportStatus.uploading) {
+      showDialog<void>(
+        context: context,
+        builder:
+            (ctx) => AlertDialog(
+              title: Text(l.stillUploadingTitle),
+              content: Text(l.stillUploadingMessage),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text(l.okButton),
+                ),
+              ],
+            ),
+      );
+    } else if (r.id != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ReportDetailScreen(reportId: r.id!)),
+      );
+    }
+  }
 
   /// "This week" = current calendar week starting Monday.
   List<ReportEntry> _visible(List<ReportEntry> all) {
     var result = all;
     if (_active.contains(_ReportFilter.thisWeek)) {
       final now = DateTime.now();
-      final monday = DateTime(now.year, now.month, now.day)
-          .subtract(Duration(days: now.weekday - 1));
+      final monday = DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).subtract(Duration(days: now.weekday - 1));
       result = result.where((r) => !r.createdAt.isBefore(monday)).toList();
     }
     if (_active.contains(_ReportFilter.ready)) {
@@ -99,14 +130,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
         content = _Message(l.noReportsYet);
       } else {
         final visible = _visible(all);
-        content = visible.isEmpty
-            ? _Message(l.noMatchingReports)
-            : ListView.separated(
-                padding: const EdgeInsets.all(16),
-                itemCount: visible.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 12),
-                itemBuilder: (context, i) => _ReportCard(report: visible[i]),
-              );
+        content =
+            visible.isEmpty
+                ? _Message(l.noMatchingReports)
+                : ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: visible.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
+                  itemBuilder:
+                      (context, i) => _ReportCard(
+                        report: visible[i],
+                        onTap: () => _openReport(context, visible[i]),
+                      ),
+                );
       }
     }
 
@@ -206,9 +242,10 @@ class _FilterChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? theme.colorScheme.primary : theme.cardTheme.color,
           borderRadius: BorderRadius.circular(999),
-          border: selected
-              ? null
-              : Border.all(color: theme.colorScheme.outlineVariant),
+          border:
+              selected
+                  ? null
+                  : Border.all(color: theme.colorScheme.outlineVariant),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -234,23 +271,26 @@ class _FilterChip extends StatelessWidget {
 
 class _ReportCard extends StatelessWidget {
   final ReportEntry report;
+  final VoidCallback onTap;
 
-  const _ReportCard({required this.report});
+  const _ReportCard({required this.report, required this.onTap});
 
   /// "12:04 today" / "Yesterday" / "Jun 27" — rules inferred from the mock.
   String _when(BuildContext context, AppLocalizations l) {
     final now = DateTime.now();
     final d = report.createdAt;
     if (DateUtils.isSameDay(d, now)) {
-      final time = MaterialLocalizations.of(context)
-          .formatTimeOfDay(TimeOfDay.fromDateTime(d));
+      final time = MaterialLocalizations.of(
+        context,
+      ).formatTimeOfDay(TimeOfDay.fromDateTime(d));
       return l.timeToday(time);
     }
     if (DateUtils.isSameDay(d, now.subtract(const Duration(days: 1)))) {
       return l.yesterdayLabel;
     }
-    return DateFormat.MMMd(Localizations.localeOf(context).toString())
-        .format(d);
+    return DateFormat.MMMd(
+      Localizations.localeOf(context).toString(),
+    ).format(d);
   }
 
   String _subtitle(BuildContext context, AppLocalizations l) {
@@ -278,54 +318,63 @@ class _ReportCard extends StatelessWidget {
 
     return Card(
       margin: EdgeInsets.zero,
-      shape: queued
-          ? RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-              side: BorderSide(color: AppTheme.warning.withValues(alpha: 0.5)),
-            )
-          : null,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            EntityAvatar(name: report.customerName, color: accent),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          report.customerName,
-                          style: theme.textTheme.bodyLarge
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      if (report.hasAudio)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 4),
-                          child: Icon(
-                            Icons.headphones,
-                            size: 14,
-                            color: theme.colorScheme.onSurfaceVariant,
+      shape:
+          queued
+              ? RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+                side: BorderSide(
+                  color: AppTheme.warning.withValues(alpha: 0.5),
+                ),
+              )
+              : null,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              EntityAvatar(name: report.customerName, color: accent),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            report.customerName,
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _subtitle(context, l),
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                ],
+                        if (report.hasAudio)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 4),
+                            child: Icon(
+                              Icons.headphones,
+                              size: 14,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _subtitle(context, l),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            StatusChip(status: report.status),
-          ],
+              const SizedBox(width: 8),
+              StatusChip(status: report.status),
+            ],
+          ),
         ),
       ),
     );
@@ -362,40 +411,41 @@ class _SkeletonList extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme.surfaceContainerHighest;
     Widget bar(double width) => Container(
-          width: width,
-          height: 12,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(6),
-          ),
-        );
+      width: width,
+      height: 12,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(6),
+      ),
+    );
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: 3,
       separatorBuilder: (_, _) => const SizedBox(height: 12),
-      itemBuilder: (_, _) => Card(
-        margin: EdgeInsets.zero,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(12),
-                ),
+      itemBuilder:
+          (_, _) => Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [bar(140), const SizedBox(height: 6), bar(90)],
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [bar(140), const SizedBox(height: 6), bar(90)],
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
     );
   }
 }

@@ -266,6 +266,8 @@
   "filterReady": "Ready",
   "filterAudio": "Audio",
   "noMatchingReports": "No reports match this filter",
+  "stillUploadingTitle": "Still uploading",
+  "stillUploadingMessage": "This report will be available to open once it's uploaded.",
   "noReportsYet": "No reports yet",
   "reportsLoadError": "Couldn't load reports",
   "noGeofenceNote": "No geofence — location recorded",
