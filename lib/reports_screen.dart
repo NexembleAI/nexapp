@@ -7,6 +7,7 @@ import 'models/tracking_models.dart';
 import 'reports_repository.dart';
 import 'status_chip.dart';
 import 'theme.dart';
+import 'upload_queue.dart';
 
 /// Orthogonal report filters; they combine with AND. "All" is not a filter —
 /// it's the empty set.
@@ -32,12 +33,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
     super.initState();
     _load();
     ReportsRepository.instance.changes.addListener(_load);
+    UploadQueue.instance.changes.addListener(_onQueueChanged);
   }
 
   @override
   void dispose() {
     ReportsRepository.instance.changes.removeListener(_load);
+    UploadQueue.instance.changes.removeListener(_onQueueChanged);
     super.dispose();
+  }
+
+  void _onQueueChanged() {
+    if (mounted) setState(() {}); // re-read UploadQueue.items
   }
 
   Future<void> _load() async {
@@ -80,18 +87,27 @@ class _ReportsScreenState extends State<ReportsScreen> {
       content = _Message(l.reportsLoadError);
     } else if (_reports == null) {
       content = const _SkeletonList();
-    } else if (_reports!.isEmpty) {
-      content = _Message(l.noReportsYet);
     } else {
-      final visible = _visible(_reports!);
-      content = visible.isEmpty
-          ? _Message(l.noMatchingReports)
-          : ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: visible.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 12),
-              itemBuilder: (context, i) => _ReportCard(report: visible[i]),
-            );
+      // Local queue (queued/uploading) + server history, newest first —
+      // matches "merge the local upload queue with the server list".
+      final all = [
+        ...UploadQueue.instance.items.map(ReportEntry.fromQueued),
+        ..._reports!,
+      ]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      if (all.isEmpty) {
+        content = _Message(l.noReportsYet);
+      } else {
+        final visible = _visible(all);
+        content = visible.isEmpty
+            ? _Message(l.noMatchingReports)
+            : ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: visible.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 12),
+                itemBuilder: (context, i) => _ReportCard(report: visible[i]),
+              );
+      }
     }
 
     return Scaffold(
