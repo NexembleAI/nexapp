@@ -52,10 +52,15 @@ class Preferences {
     if (instance.getString(id) == null) {
       await instance.setString(id, (Random().nextInt(90000000) + 10000000).toString());
       await instance.setString(accuracy, 'high');
-      await instance.setInt(interval, 180);
+      await instance.setInt(interval, 60);
       await instance.setInt(distance, 25);
       await instance.setBool(buffer, true);
       await instance.setBool(stopDetection, true);
+    }
+    // One-time migration: the old auto-seeded default was 180s and was never a
+    // deliberate user choice — bring existing installs onto the new 60s default.
+    if (instance.getInt(interval) == 180) {
+      await instance.setInt(interval, 60);
     }
     // Seed `url` from the build-time NEX_TRACCAR_URL, and re-apply it whenever
     // that define changes (covers fresh installs and upgrades to a build with a
@@ -79,7 +84,7 @@ class Preferences {
           _ => Accuracy.medium,
         },
         distanceMeters: instance.getInt(distance) ?? 25,
-        intervalSeconds: instance.getInt(interval) ?? 180,
+        intervalSeconds: instance.getInt(interval) ?? 60,
         angleDegrees: instance.getInt(angle) ?? 0,
         heartbeatIntervalSeconds: instance.getInt(heartbeat) ?? 0,
         stopDetection: instance.getBool(stopDetection) ?? true,
