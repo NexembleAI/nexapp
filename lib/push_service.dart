@@ -11,11 +11,20 @@ import 'preferences.dart';
 
 class PushService {
   static Future<void> init() async {
-    await FirebaseMessaging.instance.requestPermission();
+    // Do NOT request notification permission here — this runs at app launch
+    // (before login/onboarding) and would fire the iOS prompt immediately. The
+    // onboarding wizard (and Settings "Fix") ask for it at the right time. The
+    // listeners and token upload below don't prompt.
     FirebaseMessaging.onBackgroundMessage(pushServiceBackgroundHandler);
     FirebaseMessaging.onMessage.listen(_onMessage);
     FirebaseMessaging.instance.onTokenRefresh.listen(_uploadToken);
     unawaited(_uploadInitialToken());
+  }
+
+  /// Requests notification permission via Firebase so iOS registers with APNs
+  /// (needed for FCM to mint a token). Used by the onboarding notification step.
+  static Future<void> requestPermission() async {
+    await FirebaseMessaging.instance.requestPermission();
   }
 
   static Future<void> _uploadInitialToken() async {

@@ -6,9 +6,8 @@ import 'l10n/app_localizations.dart';
 import 'permissions_onboarding.dart';
 import 'theme.dart';
 
-/// First-run permission wizard (design screen 03). A paged walk-through of the
-/// platform's applicable permissions. Request semantics are stubbed in this
-/// step — "Allow"/"Not now" simply advance; real OS requests land next.
+/// First-run permission wizard (design screen 03): intro → one page per
+/// not-yet-granted permission (with real OS requests + escalation) → done.
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback onFinish;
   const OnboardingScreen({super.key, required this.onFinish});
@@ -17,33 +16,63 @@ class OnboardingScreen extends StatefulWidget {
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
+class _OnboardingScreenState extends State<OnboardingScreen>
+    with WidgetsBindingObserver {
   final _controller = PageController();
-  final List<OnboardingPermission> _steps = PermissionsOnboarding.steps;
   final Map<OnboardingPermission, PermissionGrant> _status = {};
+  List<OnboardingPermission> _permSteps = const [];
+  bool _loading = true;
   int _index = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadStatus();
+    WidgetsBinding.instance.addObserver(this);
+    _init();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
   }
 
-  Future<void> _loadStatus() async {
-    for (final s in _steps) {
+  Future<void> _init() async {
+    final pending = await PermissionsOnboarding.pendingSteps();
+    for (final s in pending) {
       _status[s] = await PermissionsOnboarding.status(s);
     }
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {
+      _permSteps = pending;
+      _loading = false;
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // After returning from a Settings redirect (e.g. Android background
+    // location), re-check the current step and auto-advance if it's now granted.
+    if (state == AppLifecycleState.resumed) _recheckCurrent();
+  }
+
+  Future<void> _recheckCurrent() async {
+    final permIndex = _index - 1;
+    if (permIndex < 0 || permIndex >= _permSteps.length) return;
+    final step = _permSteps[permIndex];
+    final was = _status[step];
+    final now = await PermissionsOnboarding.status(step);
+    if (!mounted) return;
+    setState(() => _status[step] = now);
+    if (was != PermissionGrant.granted && now == PermissionGrant.granted) {
+      _next();
+    }
   }
 
   void _next() {
-    if (_index < _steps.length - 1) {
+    // Total pages = intro + perm steps + completion.
+    if (_index < _permSteps.length + 1) {
       _controller.nextPage(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
@@ -53,71 +82,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context)!;
-    final theme = Theme.of(context);
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _ProgressBar(count: _steps.length, current: _index),
-                  const Spacer(),
-                  Text(
-                    l.onboardingStepLabel(_index + 1, _steps.length),
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: PageView(
-                controller: _controller,
-                physics: const NeverScrollableScrollPhysics(),
-                onPageChanged: (i) => setState(() => _index = i),
-                children: [
-                  for (final p in _steps)
-                    _PermissionPage(
-                      permission: p,
-                      status: _status[p] ?? PermissionGrant.denied,
-                      onAllow: _next,
-                      onSkip: _next,
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  Future<void> _allow(OnboardingPermission step) async {
+    final result = await PermissionsOnboarding.request(step);
+    if (!mounted) return;
+    setState(() => _status[step] = result);
+    // Granted → move on. Location "while using" stays put so the next tap
+    // triggers the Always upgrade (pill now explains the current state).
+    if (result == PermissionGrant.granted) _next();
   }
-}
 
-class _PermissionPage extends StatelessWidget {
-  final OnboardingPermission permission;
-  final PermissionGrant status;
-  final VoidCallback onAllow;
-  final VoidCallback onSkip;
-
-  const _PermissionPage({
-    required this.permission,
-    required this.status,
-    required this.onAllow,
-    required this.onSkip,
-  });
-
-  ({IconData icon, String title, String body, String allow}) _content(
+  static ({IconData icon, String title, String body, String allow}) _content(
     AppLocalizations l,
+    OnboardingPermission p,
   ) {
-    switch (permission) {
+    switch (p) {
       case OnboardingPermission.location:
         return (
           icon: Icons.location_on,
@@ -144,23 +122,138 @@ class _PermissionPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     final l = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
-    final c = _content(l);
-    // Only the location step surfaces a "current state" pill, and only when the
-    // user is stuck at while-using (matches the mock). Refined next step.
-    final showPill = permission == OnboardingPermission.location &&
-        status == PermissionGrant.partial;
+    final permIndex = _index - 1;
+    final onPermPage = permIndex >= 0 && permIndex < _permSteps.length;
 
+    final pages = <Widget>[
+      _WizardPage(
+        illustration: const _Illustration(
+          icon: Icons.near_me_rounded,
+          gradient: [AppTheme.spectrumIndigo, AppTheme.spectrumBlue],
+        ),
+        title: l.onboardingIntroTitle,
+        body: l.onboardingIntroBody,
+        primaryLabel: l.onboardingIntroStart,
+        onPrimary: _next,
+      ),
+      for (final step in _permSteps) _permPage(l, step),
+      _WizardPage(
+        illustration: const _Illustration(
+          icon: Icons.check_rounded,
+          gradient: [AppTheme.success, Color(0xFF22C55E)],
+          glow: AppTheme.success,
+        ),
+        title: l.onboardingDoneTitle,
+        body: l.onboardingDoneBody,
+        primaryLabel: l.onboardingDoneButton,
+        onPrimary: widget.onFinish,
+      ),
+    ];
+
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          children: [
+            SizedBox(
+              height: 44,
+              child: onPermPage
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _ProgressBar(
+                            count: _permSteps.length,
+                            current: permIndex,
+                          ),
+                          const Spacer(),
+                          Text(
+                            l.onboardingStepLabel(
+                              permIndex + 1,
+                              _permSteps.length,
+                            ),
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : null,
+            ),
+            Expanded(
+              child: PageView(
+                controller: _controller,
+                physics: const NeverScrollableScrollPhysics(),
+                onPageChanged: (i) => setState(() => _index = i),
+                children: pages,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _permPage(AppLocalizations l, OnboardingPermission step) {
+    final c = _content(l, step);
+    final status = _status[step] ?? PermissionGrant.denied;
+    final showPill = step == OnboardingPermission.location &&
+        status == PermissionGrant.partial;
+    return _WizardPage(
+      illustration: _Illustration(icon: c.icon),
+      title: c.title,
+      body: c.body,
+      pill: showPill
+          ? _CurrentPill(text: l.onboardingLocationCurrentPartial)
+          : null,
+      primaryLabel: c.allow,
+      onPrimary: () => _allow(step),
+      secondaryLabel: l.onboardingNotNow,
+      onSecondary: _next,
+    );
+  }
+}
+
+class _WizardPage extends StatelessWidget {
+  final Widget illustration;
+  final String title;
+  final String body;
+  final Widget? pill;
+  final String primaryLabel;
+  final VoidCallback onPrimary;
+  final String? secondaryLabel;
+  final VoidCallback? onSecondary;
+
+  const _WizardPage({
+    required this.illustration,
+    required this.title,
+    required this.body,
+    required this.primaryLabel,
+    required this.onPrimary,
+    this.pill,
+    this.secondaryLabel,
+    this.onSecondary,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 28),
       child: Column(
         children: [
           const Spacer(flex: 3),
-          _Illustration(icon: c.icon),
+          illustration,
           const SizedBox(height: 34),
           Text(
-            c.title,
+            title,
             textAlign: TextAlign.center,
             style: theme.textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w800,
@@ -169,7 +262,7 @@ class _PermissionPage extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            c.body,
+            body,
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: AppTheme.mutedLabel(theme.brightness),
@@ -177,15 +270,12 @@ class _PermissionPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
-          if (showPill)
-            _CurrentPill(text: l.onboardingLocationCurrentPartial)
-          else
-            const SizedBox(height: 4),
+          pill ?? const SizedBox(height: 4),
           const Spacer(flex: 4),
           SizedBox(
             width: double.infinity,
             child: FilledButton(
-              onPressed: onAllow,
+              onPressed: onPrimary,
               style: FilledButton.styleFrom(
                 minimumSize: const Size.fromHeight(54),
                 shape: RoundedRectangleBorder(
@@ -196,20 +286,23 @@ class _PermissionPage extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              child: Text(c.allow),
+              child: Text(primaryLabel),
             ),
           ),
           const SizedBox(height: 6),
-          TextButton(
-            onPressed: onSkip,
-            child: Text(
-              l.onboardingNotNow,
-              style: TextStyle(
-                color: AppTheme.mutedLabel(theme.brightness),
-                fontWeight: FontWeight.w600,
+          if (secondaryLabel != null)
+            TextButton(
+              onPressed: onSecondary,
+              child: Text(
+                secondaryLabel!,
+                style: TextStyle(
+                  color: AppTheme.mutedLabel(theme.brightness),
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-          ),
+            )
+          else
+            const SizedBox(height: 40),
           const SizedBox(height: 8),
         ],
       ),
@@ -219,11 +312,18 @@ class _PermissionPage extends StatelessWidget {
 
 class _Illustration extends StatelessWidget {
   final IconData icon;
-  const _Illustration({required this.icon});
+  final List<Color> gradient;
+  final Color? glow;
+
+  const _Illustration({
+    required this.icon,
+    this.gradient = const [AppTheme.spectrumIndigo, AppTheme.spectrumBlue],
+    this.glow,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
+    final ring = glow ?? Theme.of(context).colorScheme.primary;
     return SizedBox(
       width: 150,
       height: 150,
@@ -237,7 +337,7 @@ class _Illustration extends StatelessWidget {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: primary.withValues(alpha: 0.22),
+                  color: ring.withValues(alpha: 0.22),
                   blurRadius: 32,
                   spreadRadius: 2,
                 ),
@@ -248,7 +348,7 @@ class _Illustration extends StatelessWidget {
             width: 132,
             height: 132,
             child: CustomPaint(
-              painter: _DashedRingPainter(primary.withValues(alpha: 0.55)),
+              painter: _DashedRingPainter(ring.withValues(alpha: 0.55)),
             ),
           ),
           Container(
@@ -256,10 +356,10 @@ class _Illustration extends StatelessWidget {
             height: 96,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(26),
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [AppTheme.spectrumIndigo, AppTheme.spectrumBlue],
+                colors: gradient,
               ),
             ),
             child: Icon(icon, color: Colors.white, size: 44),
