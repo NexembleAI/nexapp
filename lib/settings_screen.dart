@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -8,8 +10,11 @@ import 'auth_service.dart';
 import 'entity_avatar.dart';
 import 'geolocation_service.dart';
 import 'l10n/app_localizations.dart';
+import 'models/tracking_models.dart';
 import 'preferences.dart';
+import 'status_screen.dart';
 import 'theme.dart';
+import 'tracking_repository.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -35,6 +40,14 @@ class _SettingsScreenState extends State<SettingsScreen>
   static const _distancePresets = [10, 25, 50, 100];
   static const _intervalPresets = [10, 30, 60, 300];
 
+  // Device card.
+  String _deviceId = '';
+  bool _deviceRegistered = false;
+  String _deviceModel = '';
+  String _deviceOs = '';
+  bool _pushConnected = false;
+  OfficeHours? _officeHours;
+
   @override
   void initState() {
     super.initState();
@@ -42,6 +55,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     _loadUser();
     _loadPermissions();
     _loadTracking();
+    _loadDevice();
   }
 
   @override
@@ -155,6 +169,36 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   static String _humanInterval(int s) => s < 300 ? '$s s' : '${s ~/ 60} min';
 
+  Future<void> _loadDevice() async {
+    _deviceId = Preferences.instance.getString(Preferences.id) ?? '';
+    _deviceRegistered =
+        Preferences.instance.getBool(Preferences.deviceRegistered) == true;
+    if (mounted) setState(() {});
+
+    try {
+      final plugin = DeviceInfoPlugin();
+      if (Platform.isAndroid) {
+        final a = await plugin.androidInfo;
+        _deviceModel = a.model;
+        _deviceOs = 'Android ${a.version.release}';
+      } else if (Platform.isIOS) {
+        final i = await plugin.iosInfo;
+        _deviceModel = i.utsname.machine;
+        _deviceOs = '${i.systemName} ${i.systemVersion}';
+      }
+    } catch (_) {}
+
+    try {
+      _pushConnected = (await FirebaseMessaging.instance.getToken()) != null;
+    } catch (_) {}
+
+    try {
+      _officeHours = await TrackingRepository.instance.officeHours();
+    } catch (_) {}
+
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
@@ -184,6 +228,33 @@ class _SettingsScreenState extends State<SettingsScreen>
         ),
       ),
     );
+
+    Widget infoRow(String label, String value) => Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: AppTheme.mutedLabel(theme.brightness),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+    String hoursText() => _officeHours == null
+        ? '—'
+        : '${MaterialLocalizations.of(context).formatTimeOfDay(_officeHours!.start)}'
+              ' – '
+              '${MaterialLocalizations.of(context).formatTimeOfDay(_officeHours!.end)}';
 
     return Scaffold(
       appBar: AppBar(title: Text(l.settingsTitle)),
@@ -281,6 +352,114 @@ class _SettingsScreenState extends State<SettingsScreen>
                     ),
                   ],
                 ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          sectionLabel(l.deviceSectionLabel),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        _deviceRegistered
+                            ? Icons.verified_outlined
+                            : Icons.pending_outlined,
+                        size: 20,
+                        color: _deviceRegistered
+                            ? AppTheme.success
+                            : AppTheme.warning,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _deviceRegistered
+                              ? l.deviceRegisteredStatus
+                              : l.deviceNotRegisteredStatus,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: _deviceRegistered
+                                ? null
+                                : AppTheme.mutedLabel(theme.brightness),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 24),
+                  infoRow(
+                    l.deviceModelRow,
+                    _deviceModel.isEmpty ? '—' : '$_deviceModel · $_deviceOs',
+                  ),
+                  const SizedBox(height: 12),
+                  infoRow(l.deviceIdRow, _deviceId.isEmpty ? '—' : _deviceId),
+                  const SizedBox(height: 12),
+                  infoRow(
+                    l.devicePushRow,
+                    _pushConnected
+                        ? l.devicePushConnected
+                        : l.devicePushUnavailable,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          sectionLabel(l.officeHoursSectionLabel),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.schedule_outlined,
+                    size: 20,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          hoursText(),
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          l.officeHoursHelp,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: AppTheme.mutedLabel(theme.brightness),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Card(
+            margin: EdgeInsets.zero,
+            clipBehavior: Clip.antiAlias,
+            child: ListTile(
+              leading: Icon(
+                Icons.article_outlined,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              title: Text(l.diagnosticsRow),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const StatusScreen()),
               ),
             ),
           ),
