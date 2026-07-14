@@ -209,6 +209,85 @@ enum ReportStatus {
   archived,
 }
 
+enum ReportEditField { textBody, leadTags, audio }
+
+/// One audit entry from tracking.visit_report_edit (§4.4.2) — per field.
+class ReportEdit {
+  final int version;
+  final ReportEditField field;
+  final DateTime editedAt;
+  final String? editedBy;
+
+  const ReportEdit({
+    required this.version,
+    required this.field,
+    required this.editedAt,
+    this.editedBy,
+  });
+}
+
+/// Full visit report (design screen 08). Audio is play-only/immutable and,
+/// in production, streamed from GET /visit/report/{id}/audio.
+class ReportDetail {
+  final String id;
+  final String customerId;
+  final String customerName;
+  final DateTime createdAt;
+  final Duration? dwell;
+  final ReportStatus status;
+  final bool geofencePresent;
+  final String? transcript; // null until status == ready
+  final String notes; // text_body, editable
+  final bool audioPresent;
+  final int? audioDurationS;
+  final String? audioMime;
+  final List<String> leadIds;
+  final int version;
+  final List<ReportEdit> edits;
+
+  const ReportDetail({
+    required this.id,
+    required this.customerId,
+    required this.customerName,
+    required this.createdAt,
+    this.dwell,
+    required this.status,
+    required this.geofencePresent,
+    this.transcript,
+    required this.notes,
+    required this.audioPresent,
+    this.audioDurationS,
+    this.audioMime,
+    required this.leadIds,
+    required this.version,
+    this.edits = const [],
+  });
+
+  ReportDetail copyWith({
+    String? notes,
+    List<String>? leadIds,
+    int? version,
+    List<ReportEdit>? edits,
+  }) =>
+      ReportDetail(
+        id: id,
+        customerId: customerId,
+        customerName: customerName,
+        createdAt: createdAt,
+        dwell: dwell,
+        status: status,
+        geofencePresent: geofencePresent,
+        transcript: transcript,
+        notes: notes ?? this.notes,
+        audioPresent: audioPresent,
+        audioDurationS: audioDurationS,
+        audioMime: audioMime,
+        leadIds: leadIds ?? this.leadIds,
+        version: version ?? this.version,
+        edits: edits ?? this.edits,
+      );
+}
+
 /// One visit row (Home "Today's visits" and the Reports history).
 class VisitEntry {
   final String customerName;
@@ -228,6 +307,7 @@ class VisitEntry {
 /// VisitEntry: reports span days and carry content/upload facts the
 /// home visit list doesn't show.
 class ReportEntry {
+  final String? id; // server report id; null for queue-mapped rows
   final String customerName;
   final DateTime createdAt;
 
@@ -243,6 +323,7 @@ class ReportEntry {
   final bool geofencePresent;
 
   const ReportEntry({
+    this.id,
     required this.customerName,
     required this.createdAt,
     this.dwell,

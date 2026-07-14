@@ -43,6 +43,7 @@ flutter:
   generate: true
   assets:
     - assets/certs/nexemble_ca.pem
+    - assets/audio/
 
 flutter_launcher_icons:
   ios: true
