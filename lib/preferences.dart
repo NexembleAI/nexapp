@@ -32,6 +32,9 @@ class Preferences {
   // ISO-8601 time the current tracking session started ("Active since" on the
   // home card). Written/cleared by GeolocationService.start()/stop().
   static const String trackingStartedAt = 'tracking_started_at';
+  // Set true once the first-run permission wizard has been completed/skipped.
+  // Not part of the fresh-install defaults.
+  static const String onboardingComplete = 'onboarding_complete';
 
   static Future<void> init() async {
     _initFuture ??= _createInstance();
@@ -45,7 +48,7 @@ class Preferences {
           : SharedPreferencesOptions(),
       cacheOptions: SharedPreferencesWithCacheOptions(
         allowList: {
-          id, url, accuracy, distance, interval, angle, heartbeat, buffer, wakelock, stopDetection, preferPlatformProviders, password, deviceRegistered, urlConfig, trackingStartedAt,
+          id, url, accuracy, distance, interval, angle, heartbeat, buffer, wakelock, stopDetection, preferPlatformProviders, password, deviceRegistered, urlConfig, trackingStartedAt, onboardingComplete,
         },
       ),
     );
