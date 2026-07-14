@@ -103,7 +103,7 @@ class QueuedReport {
   final double? latitude;
   final double? longitude;
   final double? accuracyMeters;
-  final String? audioPath;
+  final String? audioPath; // filename only (see UploadQueue.absoluteAudioPath)
   final String? audioMime;
   final int? audioDurationMs;
   final int? audioSizeBytes;
@@ -251,6 +251,18 @@ class ReportEntry {
     required this.hasNotes,
     this.geofencePresent = true,
   });
+
+  /// A queued/uploading item rendered as a report row in the Reports tab.
+  factory ReportEntry.fromQueued(QueuedReport q) => ReportEntry(
+        customerName: q.customerName,
+        createdAt: q.createdAt,
+        status: q.status == QueueStatus.uploading
+            ? ReportStatus.uploading
+            : ReportStatus.queued,
+        hasAudio: q.hasAudio,
+        hasNotes: q.hasNotes,
+        geofencePresent: false, // manual, no geofence session (§3.3)
+      );
 }
 
 /// Counts for the Home stats row (alerts count comes from AlertsRepository).

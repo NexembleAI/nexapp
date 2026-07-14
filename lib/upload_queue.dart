@@ -82,9 +82,10 @@ class UploadQueue {
       where: 'idempotency_key = ?',
       whereArgs: [id],
     );
-    if (item.audioPath != null) {
+    final abs = absoluteAudioPath(item);
+    if (abs != null) {
       try {
-        await File(item.audioPath!).delete();
+        await File(abs).delete();
       } catch (_) {}
     }
     _changes.bump();
@@ -177,9 +178,17 @@ class UploadQueue {
     onEnqueued?.call(item);
   }
 
-  /// Moves the recorded temp file into the queue-owned persistent dir.
+  /// Absolute path for a stored audio filename, rebuilt against the current
+  /// audio dir (iOS container paths change between launches — we persist only
+  /// the filename, never an absolute path).
+  String? absoluteAudioPath(QueuedReport item) =>
+      item.audioPath == null ? null : p.join(_audioDir!, item.audioPath!);
+
+  /// Moves the recorded temp file into the queue-owned persistent dir; returns
+  /// the FILENAME (relative), which is what gets persisted.
   Future<String> _persistAudio(String id, ReportAudio audio) async {
-    final dest = p.join(_audioDir!, '$id${p.extension(audio.path)}');
+    final fileName = '$id${p.extension(audio.path)}';
+    final dest = p.join(_audioDir!, fileName);
     final src = File(audio.path);
     try {
       await src.rename(dest); // same-filesystem move
@@ -189,7 +198,7 @@ class UploadQueue {
         await src.delete();
       } catch (_) {}
     }
-    return dest;
+    return fileName;
   }
 
   /// Deletes audio files with no row, and drops rows whose audio is missing.
@@ -197,7 +206,7 @@ class UploadQueue {
     final known = _items.map((i) => i.audioPath).whereType<String>().toSet();
     final dir = Directory(_audioDir!);
     await for (final f in dir.list()) {
-      if (f is File && !known.contains(f.path)) {
+      if (f is File && !known.contains(p.basename(f.path))) {
         try {
           await f.delete();
         } catch (_) {}
@@ -205,7 +214,8 @@ class UploadQueue {
     }
     final missing = <String>[];
     for (final i in _items) {
-      if (i.audioPath != null && !await File(i.audioPath!).exists()) {
+      final abs = absoluteAudioPath(i);
+      if (abs != null && !await File(abs).exists()) {
         missing.add(i.idempotencyKey);
       }
     }
