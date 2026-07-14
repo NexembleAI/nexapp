@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'push_service.dart';
+
 /// The permissions the first-run wizard walks through, in ask order.
 enum OnboardingPermission { location, notifications, battery }
 
@@ -52,5 +54,41 @@ class PermissionsOnboarding {
       if (await status(p) != PermissionGrant.granted) result.add(p);
     }
     return result;
+  }
+
+  /// Requests [p] and returns the resulting grant. Location performs the
+  /// mandatory two-stage escalation: foreground first, then — when already
+  /// "while using" — the Always upgrade (iOS one-time prompt; Android 11+ has
+  /// no dialog for background, so it routes to Settings, and the wizard
+  /// re-checks on resume).
+  static Future<PermissionGrant> request(OnboardingPermission p) async {
+    switch (p) {
+      case OnboardingPermission.location:
+        var perm = await Geolocator.checkPermission();
+        if (perm == LocationPermission.denied) {
+          perm = await Geolocator.requestPermission();
+        }
+        if (perm == LocationPermission.whileInUse) {
+          // Escalate to Always. Geolocator.requestPermission() no-ops once
+          // while-using is held, so use permission_handler, which actually
+          // calls requestAlwaysAuthorization — iOS shows "Change to Always
+          // Allow?". Android 11+ has no dialog for background, so route to
+          // Settings ("Allow all the time"); the wizard re-checks on resume.
+          if (Platform.isIOS) {
+            await Permission.locationAlways.request();
+          } else {
+            await Geolocator.openAppSettings();
+          }
+        }
+        return status(OnboardingPermission.location);
+      case OnboardingPermission.notifications:
+        // Firebase-native request so iOS registers with APNs (FCM needs it to
+        // mint a token); also covers Android 13+ POST_NOTIFICATIONS.
+        await PushService.requestPermission();
+        return status(OnboardingPermission.notifications);
+      case OnboardingPermission.battery:
+        await Permission.ignoreBatteryOptimizations.request();
+        return status(OnboardingPermission.battery);
+    }
   }
 }
