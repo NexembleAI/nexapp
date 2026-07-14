@@ -266,6 +266,17 @@
   "filterReady": "Ready",
   "filterAudio": "Audio",
   "noMatchingReports": "No reports match this filter",
+  "transcriptLabel": "Transcript",
+  "transcriptPending": "Transcript pending…",
+  "transcriptUnavailable": "Transcript unavailable",
+  "editedTimes": "{count, plural, =1{Edited once} other{Edited {count} times}}",
+  "@editedTimes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "stillUploadingTitle": "Still uploading",
   "stillUploadingMessage": "This report will be available to open once it's uploaded.",
   "noReportsYet": "No reports yet",
