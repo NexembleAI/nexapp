@@ -1,12 +1,13 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:traccar_client/password_service.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 
-import 'geolocation_service.dart';
+import 'auth_service.dart';
+import 'entity_avatar.dart';
 import 'l10n/app_localizations.dart';
-import 'preferences.dart';
+import 'theme.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -15,206 +16,335 @@ class SettingsScreen extends StatefulWidget {
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
-  bool advanced = false;
+class _SettingsScreenState extends State<SettingsScreen>
+    with WidgetsBindingObserver {
+  String? _name;
+  String? _email;
+  String _initials = '';
+  bool _locationAlways = false;
+  bool _notificationsGranted = false;
+  bool _batteryOk = false;
 
-  String _getAccuracyLabel(String? key) {
-    return switch (key) {
-      'highest' => AppLocalizations.of(context)!.highestAccuracyLabel,
-      'high' => AppLocalizations.of(context)!.highAccuracyLabel,
-      'low' => AppLocalizations.of(context)!.lowAccuracyLabel,
-      _ => AppLocalizations.of(context)!.mediumAccuracyLabel,
-    };
-  }
-
-  Future<void> _editSetting(String title, String key, bool isInt) async {
-    final initialValue = isInt
-        ? Preferences.instance.getInt(key)?.toString() ?? '0'
-        : Preferences.instance.getString(key) ?? '';
-
-    final controller = TextEditingController(text: initialValue);
-
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        scrollable: true,
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          keyboardType: isInt ? TextInputType.number : TextInputType.text,
-          inputFormatters: isInt ? [FilteringTextInputFormatter.digitsOnly] : [],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(AppLocalizations.of(context)!.cancelButton),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: Text(AppLocalizations.of(context)!.saveButton),
-          ),
-        ],
-      ),
-    );
-
-    if (result != null && result.isNotEmpty) {
-      if (isInt) {
-        int? intValue = int.tryParse(result);
-        if (intValue != null) {
-          if (key == Preferences.heartbeat && intValue > 0 && intValue < 60) {
-            intValue = 60; // minimum heartbeat is 60 seconds
-          }
-          await Preferences.instance.setInt(key, intValue);
-        }
-      } else {
-        await Preferences.instance.setString(key, result);
-      }
-      await GeolocationService.tracker.setConfig(Preferences.buildConfig());
-      setState(() {});
-    }
-  }
-
-  Future<void> _changePassword() async {
-    final controller = TextEditingController();
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        scrollable: true,
-        content: TextField(
-          controller: controller,
-          decoration: InputDecoration(labelText: AppLocalizations.of(context)!.passwordLabel),
-          obscureText: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(AppLocalizations.of(context)!.cancelButton),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(AppLocalizations.of(context)!.saveButton),
-          ),
-        ],
-      ),
-    );
-    if (result == true) {
-      await PasswordService.setPassword(controller.text);
-    }
-  }
-
-  Widget _buildListTile(String title, String key, bool isInt) {
-    String? value;
-    if (isInt) {
-      final intValue = Preferences.instance.getInt(key);
-      if (intValue != null && intValue > 0) {
-        value = intValue.toString();
-      } else {
-        value = AppLocalizations.of(context)!.disabledValue;
-      }
-    } else {
-      value = Preferences.instance.getString(key);
-    }
-    return ListTile(
-      title: Text(title),
-      subtitle: Text(value ?? ''),
-      onTap: () => _editSetting(title, key, isInt),
-    );
-  }
-
-  Widget _buildAccuracyListTile() {
-    final accuracyOptions = ['highest', 'high', 'medium', 'low'];
-    return ListTile(
-      title: Text(AppLocalizations.of(context)!.accuracyLabel),
-      subtitle: Text(_getAccuracyLabel(Preferences.instance.getString(Preferences.accuracy))),
-      onTap: () async {
-        final selectedAccuracy = await showDialog<String>(
-          context: context,
-          builder: (context) => SimpleDialog(
-            title: Text(AppLocalizations.of(context)!.accuracyLabel),
-            children: accuracyOptions.map((option) => SimpleDialogOption(
-              child: Text(_getAccuracyLabel(option)),
-              onPressed: () => Navigator.pop(context, option),
-            )).toList(),
-          ),
-        );
-        if (selectedAccuracy != null) {
-          await Preferences.instance.setString(Preferences.accuracy, selectedAccuracy);
-          await GeolocationService.tracker.setConfig(Preferences.buildConfig());
-          setState(() {});
-        }
-      },
-    );
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _loadUser();
+    _loadPermissions();
   }
 
   @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Re-check after the user returns from OS settings / a system dialog.
+    if (state == AppLifecycleState.resumed) _loadPermissions();
+  }
+
+  Future<void> _loadUser() async {
+    final claims = await AuthService.instance.idTokenClaims();
+    if (!mounted || claims == null) return;
+    String? clean(Object? v) {
+      final s = (v as String?)?.trim();
+      return (s == null || s.isEmpty) ? null : s;
+    }
+
+    final name = clean(claims['name']);
+    final email = clean(claims['email']);
+    final username = clean(claims['preferred_username']);
+    setState(() {
+      _name = name ?? username;
+      _email = email ?? username;
+      _initials = initialsOf(name ?? _name ?? '?');
+    });
+  }
+
+  Future<void> _loadPermissions() async {
+    final loc = await Geolocator.checkPermission();
+    final notif = await Permission.notification.isGranted;
+    final battery = Platform.isAndroid
+        ? await Permission.ignoreBatteryOptimizations.isGranted
+        : true;
+    if (!mounted) return;
+    setState(() {
+      // Continuous background tracking needs Always — whileInUse is not enough.
+      _locationAlways = loc == LocationPermission.always;
+      _notificationsGranted = notif;
+      _batteryOk = battery;
+    });
+  }
+
+  Future<void> _fixLocation() async {
+    var p = await Geolocator.checkPermission();
+    // Request in-app first — this shows the OS prompt, including iOS's
+    // "Change to Always Allow?" upgrade when currently whileInUse. Only fall
+    // back to the app settings page if the OS won't (re-)prompt.
+    if (p == LocationPermission.denied ||
+        p == LocationPermission.whileInUse) {
+      p = await Geolocator.requestPermission();
+    }
+    if (p != LocationPermission.always) await Geolocator.openAppSettings();
+  }
+
+  Future<void> _fixNotifications() async {
+    // request() shows the OS dialog on Android 13+/iOS first-time; on older
+    // Android (no runtime permission) or once decided it returns without a
+    // dialog, so fall back to the app settings page whenever it's not granted.
+    final s = await Permission.notification.request();
+    if (!s.isGranted) await openAppSettings();
+  }
+
+  Future<void> _fixBattery() => Permission.ignoreBatteryOptimizations.request();
+
+  @override
   Widget build(BuildContext context) {
-    final isHighestAccuracy = Preferences.instance.getString(Preferences.accuracy) == 'highest';
-    final distance = Preferences.instance.getInt(Preferences.distance);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(AppLocalizations.of(context)!.settingsTitle),
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+
+    Widget sectionLabel(String text) => Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+      child: Text(
+        text.toUpperCase(),
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: AppTheme.mutedLabel(theme.brightness),
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.8,
+        ),
       ),
+    );
+
+    return Scaffold(
+      appBar: AppBar(title: Text(l.settingsTitle)),
       body: ListView(
+        padding: const EdgeInsets.all(16),
         children: [
-          _buildListTile(AppLocalizations.of(context)!.idLabel, Preferences.id, false),
-          _buildAccuracyListTile(),
-          _buildListTile(AppLocalizations.of(context)!.distanceLabel, Preferences.distance, true),
-          if (isHighestAccuracy || Platform.isAndroid && distance == 0)
-            _buildListTile(AppLocalizations.of(context)!.intervalLabel, Preferences.interval, true),
-          if (isHighestAccuracy)
-            _buildListTile(AppLocalizations.of(context)!.angleLabel, Preferences.angle, true),
-          _buildListTile(AppLocalizations.of(context)!.heartbeatLabel, Preferences.heartbeat, true),
-          SwitchListTile(
-            title: Text(AppLocalizations.of(context)!.advancedLabel),
-            value: advanced,
-            onChanged: (value) {
-              setState(() => advanced = value);
-            },
+          _AccountCard(
+            name: _name ?? '',
+            email: _email ?? '',
+            initials: _initials,
+            onSignOut: () => AuthService.instance.logout(),
           ),
-          if (advanced)
-            SwitchListTile(
-              title: Text(AppLocalizations.of(context)!.bufferLabel),
-              value: Preferences.instance.getBool(Preferences.buffer) ?? true,
-              onChanged: (value) async {
-                await Preferences.instance.setBool(Preferences.buffer, value);
-                await GeolocationService.tracker.setConfig(Preferences.buildConfig());
-                setState(() {});
-              },
+          const SizedBox(height: 20),
+          sectionLabel(l.permissionsReliabilityLabel),
+          Card(
+            margin: EdgeInsets.zero,
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                _PermissionRow(
+                  icon: Icons.location_on_outlined,
+                  title: l.permissionLocationTitle,
+                  subtitle: l.permissionLocationSubtitle,
+                  granted: _locationAlways,
+                  onFix: _fixLocation,
+                ),
+                const Divider(height: 1, indent: 54),
+                _PermissionRow(
+                  icon: Icons.notifications_outlined,
+                  title: l.permissionNotificationsTitle,
+                  subtitle: l.permissionNotificationsSubtitle,
+                  granted: _notificationsGranted,
+                  onFix: _fixNotifications,
+                ),
+                if (Platform.isAndroid) ...[
+                  const Divider(height: 1, indent: 54),
+                  _PermissionRow(
+                    icon: Icons.battery_saver_outlined,
+                    title: l.permissionBatteryTitle,
+                    subtitle: l.permissionBatterySubtitle,
+                    granted: _batteryOk,
+                    onFix: _fixBattery,
+                  ),
+                ],
+              ],
             ),
-          if (advanced && Platform.isAndroid)
-            SwitchListTile(
-              title: Text(AppLocalizations.of(context)!.wakelockLabel),
-              value: Preferences.instance.getBool(Preferences.wakelock) ?? false,
-              onChanged: (value) async {
-                await Preferences.instance.setBool(Preferences.wakelock, value);
-                await GeolocationService.tracker.setConfig(Preferences.buildConfig());
-                setState(() {});
-              },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AccountCard extends StatelessWidget {
+  final String name;
+  final String email;
+  final String initials;
+  final VoidCallback onSignOut;
+
+  const _AccountCard({
+    required this.name,
+    required this.email,
+    required this.initials,
+    required this.onSignOut,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    AppTheme.spectrumMagenta,
+                    AppTheme.spectrumIndigo,
+                    AppTheme.spectrumBlue,
+                  ],
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                initials,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                ),
+              ),
             ),
-          if (advanced)
-            SwitchListTile(
-              title: Text(AppLocalizations.of(context)!.stopDetectionLabel),
-              value: Preferences.instance.getBool(Preferences.stopDetection) ?? true,
-              onChanged: (value) async {
-                await Preferences.instance.setBool(Preferences.stopDetection, value);
-                await GeolocationService.tracker.setConfig(Preferences.buildConfig());
-                setState(() {});
-              },
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    email,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          if (advanced && Platform.isAndroid)
-            SwitchListTile(
-              title: Text(AppLocalizations.of(context)!.preferPlatformProvidersLabel),
-              value: Preferences.instance.getBool(Preferences.preferPlatformProviders) ?? false,
-              onChanged: (value) async {
-                await Preferences.instance.setBool(Preferences.preferPlatformProviders, value);
-                await GeolocationService.tracker.setConfig(Preferences.buildConfig());
-                setState(() {});
-              },
+            const SizedBox(width: 8),
+            OutlinedButton(
+              onPressed: onSignOut,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.recording,
+                side: BorderSide(
+                  color: AppTheme.recording.withValues(alpha: 0.5),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.controlRadius),
+                ),
+              ),
+              child: Text(l.signOutButton),
             ),
-          if (advanced)
-            ListTile(
-              title: Text(AppLocalizations.of(context)!.passwordLabel),
-              onTap: _changePassword,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One permission row: green "Granted" when ok, else an amber-tinted row with
+/// a "Fix" button.
+class _PermissionRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool granted;
+  final Future<void> Function() onFix;
+
+  const _PermissionRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.granted,
+    required this.onFix,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final accent = granted ? AppTheme.success : AppTheme.warning;
+    return Container(
+      color: granted ? null : AppTheme.warning.withValues(alpha: 0.10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: 22,
+            color: granted ? theme.colorScheme.onSurfaceVariant : accent,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (granted)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppTheme.success.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.check, size: 13, color: AppTheme.success),
+                  const SizedBox(width: 4),
+                  Text(
+                    l.grantedChip,
+                    style: const TextStyle(
+                      color: AppTheme.success,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            FilledButton(
+              onPressed: onFix,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.warning,
+                minimumSize: const Size(0, 34),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+              ),
+              child: Text(l.fixButton),
             ),
         ],
       ),
