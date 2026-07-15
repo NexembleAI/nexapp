@@ -57,20 +57,16 @@ class DefaultFirebaseOptions {
     storageBucket: 'nexemble-tracker-dev.firebasestorage.app',
   );
 
-  // TODO(firebase): STALE — these are Traccar's `traccar-client-app` values.
-  // Regenerate for `nexemble-tracker-dev` (via `flutterfire configure`) once the
-  // iOS app + APNs auth key are registered. Not used at runtime today: main()
-  // calls Firebase.initializeApp() with no options, so iOS reads
-  // ios/Runner/GoogleService-Info.plist (also still Traccar's — replace too).
+  // Kept in sync with ios/Runner/GoogleService-Info.plist (the runtime source
+  // of truth — main() initializes without options). nexemble-tracker-dev; the
+  // prod project's values land with the build-flavor split.
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBEdxpKXTvJJfYDh28OLffAk4z7S7caf08',
-    appId: '1:39016471396:ios:78cbbf5775b43308',
-    messagingSenderId: '39016471396',
-    projectId: 'traccar-client-app',
-    databaseURL: 'https://traccar-client-app.firebaseio.com',
-    storageBucket: 'traccar-client-app.firebasestorage.app',
-    iosClientId: '39016471396-7mdutolor3h210bm9qmf60gp18lmmhnm.apps.googleusercontent.com',
-    iosBundleId: 'org.traccar.client.TraccarClient',
+    apiKey: 'AIzaSyAWeejWJ1mOq5qZe3JeXwTiAJBEskbfybw',
+    appId: '1:112537386830:ios:decd056aa4a6f1e9bde81f',
+    messagingSenderId: '112537386830',
+    projectId: 'nexemble-tracker-dev',
+    storageBucket: 'nexemble-tracker-dev.firebasestorage.app',
+    iosBundleId: 'com.nexemble.nexapp',
   );
 
 }
