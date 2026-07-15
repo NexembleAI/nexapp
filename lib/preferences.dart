@@ -10,6 +10,8 @@ import 'auth_config.dart';
 class Preferences {
   static Future<void>? _initFuture;
   static late SharedPreferencesWithCache instance;
+  /// True when [init] seeded a fresh install this launch (no prior prefs).
+  static bool firstRun = false;
 
   static const String id = 'id';
   static const String url = 'url';
@@ -53,6 +55,7 @@ class Preferences {
       ),
     );
     if (instance.getString(id) == null) {
+      firstRun = true;
       await instance.setString(id, (Random().nextInt(90000000) + 10000000).toString());
       await instance.setString(accuracy, 'high');
       await instance.setInt(interval, 60);
