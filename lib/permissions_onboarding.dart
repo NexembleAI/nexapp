@@ -61,30 +61,50 @@ class PermissionsOnboarding {
   /// "while using" — the Always upgrade (iOS one-time prompt; Android 11+ has
   /// no dialog for background, so it routes to Settings, and the wizard
   /// re-checks on resume).
-  static Future<PermissionGrant> request(OnboardingPermission p) async {
+  static Future<PermissionGrant> request(
+    OnboardingPermission p, {
+    bool settingsFallback = false,
+  }) async {
     switch (p) {
       case OnboardingPermission.location:
         var perm = await Geolocator.checkPermission();
         if (perm == LocationPermission.denied) {
+          // Stage 1: foreground prompt only. Stop here so "Allow Once" /
+          // "While using" just updates the pill; the next tap does the upgrade.
           perm = await Geolocator.requestPermission();
-        }
-        if (perm == LocationPermission.whileInUse) {
-          // Escalate to Always. Geolocator.requestPermission() no-ops once
-          // while-using is held, so use permission_handler, which actually
-          // calls requestAlwaysAuthorization — iOS shows "Change to Always
-          // Allow?". Android 11+ has no dialog for background, so route to
-          // Settings ("Allow all the time"); the wizard re-checks on resume.
-          if (Platform.isIOS) {
+        } else if (perm == LocationPermission.whileInUse) {
+          // Stage 2: escalate to Always. On iOS the first tap shows "Change to
+          // Always Allow?" — its result arrives asynchronously (provisional),
+          // so we do NOT open Settings here (that would pop Settings on top of
+          // the prompt); a resume re-check advances the wizard once Always is
+          // granted. Only when the user is still stuck on a later tap
+          // ([settingsFallback]) do we route to Settings — covering a declined
+          // prompt or a one-time "Allow Once" that can't be upgraded. Android
+          // 11+ has no background dialog, so it always goes to Settings.
+          if (Platform.isIOS && !settingsFallback) {
             await Permission.locationAlways.request();
           } else {
             await Geolocator.openAppSettings();
           }
         }
+        // Foreground permanently denied — Settings is the only way back.
+        if (perm == LocationPermission.deniedForever) {
+          await Geolocator.openAppSettings();
+        }
         return status(OnboardingPermission.location);
       case OnboardingPermission.notifications:
-        // Firebase-native request so iOS registers with APNs (FCM needs it to
-        // mint a token); also covers Android 13+ POST_NOTIFICATIONS.
-        await PushService.requestPermission();
+        final notif = await Permission.notification.status;
+        if (notif.isPermanentlyDenied) {
+          // iOS only shows the notification dialog once; once denied it no-ops,
+          // so Settings is the only path (also covers Android after repeated
+          // denials). Avoids a dead button. The wizard re-checks on resume.
+          await openAppSettings();
+        } else {
+          // Not yet decided — show the OS dialog. Firebase-native so iOS
+          // registers with APNs (FCM needs it to mint a token); also covers
+          // Android 13+ POST_NOTIFICATIONS.
+          await PushService.requestPermission();
+        }
         return status(OnboardingPermission.notifications);
       case OnboardingPermission.battery:
         await Permission.ignoreBatteryOptimizations.request();

@@ -32,6 +32,19 @@ class AuthService {
     authState.value = refresh != null && refresh.isNotEmpty;
   }
 
+  /// Deletes any persisted tokens without any network call. Used on a fresh
+  /// install to drop a session left behind in the iOS Keychain (which survives
+  /// app reinstall, unlike shared_preferences) so a stale token can't skip the
+  /// login screen and then fail on the first authenticated call.
+  Future<void> clearStaleSession() async {
+    await Future.wait([
+      _storage.delete(key: _kAccess),
+      _storage.delete(key: _kRefresh),
+      _storage.delete(key: _kId),
+      _storage.delete(key: _kExpiry),
+    ]);
+  }
+
   /// Launches the Keycloak login and persists the resulting tokens.
   Future<void> login() async {
     final result = await _appAuth.authorizeAndExchangeCode(

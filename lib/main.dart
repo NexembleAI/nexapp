@@ -43,6 +43,12 @@ void main() async {
   await GeolocationService.tracker.setConfig(Preferences.buildConfig());
   await PasswordService.migrate();
   await PushService.init();
+  // iOS Keychain outlives app reinstall while shared_preferences does not, so a
+  // fresh install (prefs just seeded) can inherit a stale Keychain token that
+  // skips login and then fails on the first API call. Drop it on fresh install
+  // only — an upgrade keeps its prefs (and session), so this won't sign anyone
+  // out on update.
+  if (Preferences.firstRun) await AuthService.instance.clearStaleSession();
   await AuthService.instance.restore();
   // Data-source wiring: each line flips to a real implementation as its
   // backend lands; lib/mock/ is deleted with the last one.

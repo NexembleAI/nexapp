@@ -351,6 +351,7 @@
   "onboardingLocationTitle": "Allow location\nall the time",
   "onboardingLocationBody": "Nexapp logs your route only during office hours so visits match to customers automatically. This needs Always allow — background access.",
   "onboardingLocationAllow": "Allow location access",
+  "onboardingLocationBodyEmphasis": "Always allow",
   "onboardingLocationCurrentPartial": "Currently: While using the app",
   "onboardingNotificationsTitle": "Turn on\nnotifications",
   "onboardingNotificationsBody": "Get visit prompts and lead alerts the moment they happen — even when the app is closed.",
