@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "579083644973",
+    "project_id": "nexemble-tracker-prod",
+    "storage_bucket": "nexemble-tracker-prod.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:579083644973:android:0b87e5c61a32d2d142c8a4",
+        "android_client_info": {
+          "package_name": "com.nexemble.nexapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAd07828vKfDUM0FgN8SsIUN0GEvdULmh8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
