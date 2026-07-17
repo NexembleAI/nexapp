@@ -34,7 +34,6 @@ class UploadUploader {
 
   bool _busy = false;
   bool _paused = false; // set on unauthenticated; cleared by resume()
-  String? _currentId;
   Timer? _retryTimer;
 
   void start() {
@@ -51,18 +50,13 @@ class UploadUploader {
 
   void _onChange() {
     if (!ConnectivityService.instance.isOnline) {
-      _abort();
+      // Going offline only stops us *starting* work: cancel a pending retry.
+      // An in-flight upload is deliberately left alone — its outcome decides
+      // the item's fate (the request will simply fail if the network is gone).
+      _retryTimer?.cancel();
     } else {
       _maybeDrain();
     }
-  }
-
-  Future<void> _abort() async {
-    _retryTimer?.cancel();
-    final id = _currentId;
-    if (id == null) return;
-    _currentId = null; // signals the progress loop to stop
-    await UploadQueue.instance.markQueued(id);
   }
 
   /// 1s, 2s, 4s … capped at [_maxBackoff] so a long outage retries every 5
@@ -81,31 +75,35 @@ class UploadUploader {
     final next = UploadQueue.instance.nextPending;
     if (next == null) return;
     _busy = true;
-    _currentId = next.idempotencyKey;
     final settled = await _upload(next);
     _busy = false;
-    _currentId = null;
     // Only continue when this attempt settled the item. A retryable failure
     // schedules its own backoff rather than re-picking the same row instantly.
     if (settled) _maybeDrain();
   }
 
   /// Returns true when the item is settled and the drain should move on.
+  ///
+  /// Once the request is in flight its outcome is authoritative — we never
+  /// discard a settled result (e.g. because connectivity flipped), since
+  /// throwing away a success would re-send the whole payload, audio included,
+  /// and leave correctness resting on the server deduping idempotency_key.
   Future<bool> _upload(QueuedReport item) async {
     final id = item.idempotencyKey;
     await UploadQueue.instance.markUploading(id);
 
-    // Simulated progress; the real HTTP upload will report its own.
+    // Simulated progress; the real HTTP upload will report its own. Breaking
+    // early when offline is cosmetic (stop the bar) — the outcome below still
+    // decides the item's fate.
     const steps = 20;
     for (var i = 1; i <= steps; i++) {
       await Future.delayed(const Duration(milliseconds: 200));
-      if (_currentId != id) return false; // aborted (went offline)
+      if (!ConnectivityService.instance.isOnline) break;
       UploadQueue.instance.setProgress(id, i / steps);
     }
 
     final outcome =
         await (upload?.call(item) ?? Future.value(UploadOutcome.success));
-    if (_currentId != id) return false; // aborted mid-flight
 
     switch (outcome) {
       case UploadOutcome.success:

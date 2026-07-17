@@ -64,7 +64,12 @@ void main() async {
   CustomersRepository.instance = MockCustomersRepository();
   // Uploader drains the queue while online. The POST and the server-reaction
   // are injected simulations (deleted with lib/mock/ + replaced by real HTTP).
-  UploadUploader.instance.upload = (_) async => UploadOutcome.success;
+  // Connectivity-aware so the simulation fails offline the way a real POST
+  // would (the uploader no longer aborts in-flight work — the outcome decides).
+  UploadUploader.instance.upload = (_) async =>
+      ConnectivityService.instance.isOnline
+          ? UploadOutcome.success
+          : UploadOutcome.retryable;
   UploadUploader.instance.onUploaded = (item) {
     reportsMock.addSubmitted(item);
     if (item.leadIds.isNotEmpty) alertsMock.resolveForLeads(item.leadIds);
