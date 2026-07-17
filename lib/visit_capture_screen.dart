@@ -667,6 +667,11 @@ class _RecorderCardState extends State<_RecorderCard> {
   static const _barCount = 40;
 
   _RecState _state = _RecState.idle;
+
+  /// True only while [_start]'s `service.start()` await is in flight. The
+  /// recorder may already be running natively during that window while
+  /// [_state] is still idle, so dispose() must treat it as recording.
+  bool _starting = false;
   final List<double> _levels = [];
   Duration _elapsed = Duration.zero;
   int _sizeBytes = 0;
@@ -690,7 +695,9 @@ class _RecorderCardState extends State<_RecorderCard> {
     _player?.dispose();
     // Single cleanup authority however the card is torn down (incl. an
     // abandoned mid-recording close): stop the mic + drop the temp file.
-    if (_state == _RecState.recording) {
+    // [_starting] covers the window where start() has already begun natively
+    // but hasn't returned yet, so _state is still idle.
+    if (_starting || _state == _RecState.recording) {
       widget.service.cancel();
     } else if (_state == _RecState.reviewing) {
       widget.service.deleteFile();
@@ -700,7 +707,15 @@ class _RecorderCardState extends State<_RecorderCard> {
 
   Future<void> _start() async {
     final l = AppLocalizations.of(context)!;
-    final ok = await widget.service.start();
+    _starting = true;
+    final bool ok;
+    try {
+      ok = await widget.service.start();
+    } finally {
+      // Clear even if start() threw, or a later dispose would cancel a
+      // recorder that never started.
+      _starting = false;
+    }
     if (!mounted) return;
     if (!ok) {
       ScaffoldMessenger.of(
