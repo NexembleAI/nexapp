@@ -678,8 +678,16 @@ class _RecorderCardState extends State<_RecorderCard> {
 
   /// True only while [_start]'s `service.start()` await is in flight. The
   /// recorder may already be running natively during that window while
-  /// [_state] is still idle, so dispose() must treat it as recording.
+  /// [_state] is still idle, so dispose() must treat it as recording. Also
+  /// guards [_start] against re-entrancy.
   bool _starting = false;
+
+  /// Guards [_stop] re-entrancy: the Stop button stays live until
+  /// setState(reviewing) lands after several awaits, so a double-tap (or a tap
+  /// racing the [_maxDuration] auto-stop) would run it twice — the second
+  /// service.stop() returns null, and the card's and parent's _audio then
+  /// diverge depending on which lands last.
+  bool _stopping = false;
   final List<double> _levels = [];
   Duration _elapsed = Duration.zero;
   int _sizeBytes = 0;
@@ -714,6 +722,10 @@ class _RecorderCardState extends State<_RecorderCard> {
   }
 
   Future<void> _start() async {
+    // The mic button stays live until setState(recording) lands, so a
+    // double-tap would start twice — orphaning the first temp file and leaking
+    // its amp subscription + ticker.
+    if (_starting) return;
     final l = AppLocalizations.of(context)!;
     _starting = true;
     final bool ok;
@@ -761,16 +773,22 @@ class _RecorderCardState extends State<_RecorderCard> {
   }
 
   Future<void> _stop() async {
-    await _ampSub?.cancel();
-    _ticker?.cancel();
-    final audio = await widget.service.stop();
-    if (!mounted) return;
-    _audio = audio;
-    widget.onRecordingChanged(false);
-    if (audio != null) await _initPlayer(audio);
-    if (!mounted) return;
-    setState(() => _state = _RecState.reviewing);
-    widget.onChanged(audio);
+    if (_stopping) return;
+    _stopping = true;
+    try {
+      await _ampSub?.cancel();
+      _ticker?.cancel();
+      final audio = await widget.service.stop();
+      if (!mounted) return;
+      _audio = audio;
+      widget.onRecordingChanged(false);
+      if (audio != null) await _initPlayer(audio);
+      if (!mounted) return;
+      setState(() => _state = _RecState.reviewing);
+      widget.onChanged(audio);
+    } finally {
+      _stopping = false;
+    }
   }
 
   Future<void> _initPlayer(ReportAudio audio) async {
