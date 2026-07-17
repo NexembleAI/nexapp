@@ -10,7 +10,17 @@ import 'theme.dart';
 /// not-yet-granted permission (with real OS requests + escalation) → done.
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback onFinish;
-  const OnboardingScreen({super.key, required this.onFinish});
+
+  /// Fired when the wizard reaches its final page. The permission steps are
+  /// behind the user by then, so completion can be persisted without waiting
+  /// for the last tap (see OnboardingGate).
+  final VoidCallback onReachedEnd;
+
+  const OnboardingScreen({
+    super.key,
+    required this.onFinish,
+    required this.onReachedEnd,
+  });
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -208,7 +218,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               child: PageView(
                 controller: _controller,
                 physics: const NeverScrollableScrollPhysics(),
-                onPageChanged: (i) => setState(() => _index = i),
+                onPageChanged: (i) {
+                  setState(() => _index = i);
+                  // Last page = intro + perm steps + completion.
+                  if (i == _permSteps.length + 1) widget.onReachedEnd();
+                },
                 children: pages,
               ),
             ),
