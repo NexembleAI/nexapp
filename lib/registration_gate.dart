@@ -38,7 +38,9 @@ class _RegistrationGateState extends State<RegistrationGate> {
     super.initState();
     if (_ready) {
       registerDebugLog('device already registered; skipping gate');
-      _ensureTracking(); // resume continuous tracking on this launch
+      // Respect the persisted intent — resume only if tracking is wanted, so a
+      // previous Stop survives a relaunch.
+      GeolocationService.reconcile();
     } else {
       registerDebugLog('not registered; starting registration gate');
       _register();
@@ -94,6 +96,10 @@ class _RegistrationGateState extends State<RegistrationGate> {
   /// denial throws [PlatformException], which we surface rather than fail
   /// silently. The manual home-screen toggle still lets the user pause/resume.
   Future<void> _ensureTracking() async {
+    // Registration means tracking is wanted — record the intent even if we
+    // can't start yet (permission missing), so reconcile() resumes as soon as
+    // it's granted, without a blanket auto-start.
+    await GeolocationService.setIntent(true);
     // The SDK swallows a location-permission denial on iOS (start() doesn't
     // throw), so check permission ourselves and surface it consistently on
     // both platforms. The home card derives its status from the same check.

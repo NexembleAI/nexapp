@@ -1,7 +1,4 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 
 import 'geolocation_service.dart';
 import 'l10n/app_localizations.dart';
@@ -9,7 +6,6 @@ import 'models/tracking_models.dart';
 import 'preferences.dart';
 import 'theme.dart';
 import 'tracking_repository.dart';
-import 'tracking_service.dart';
 
 /// Why tracking is in its current state; drives the dot color and subtitle.
 enum _TrackingStatus { on, notRegistered, noPermission, off }
@@ -28,39 +24,44 @@ class TrackingCard extends StatefulWidget {
 
 class _TrackingCardState extends State<TrackingCard>
     with WidgetsBindingObserver {
-  static const _pollInterval = Duration(seconds: 15);
-
   _TrackingStatus? _status; // null until the first check completes
   OfficeHours? _hours;
   List<double> _activity = const [];
-  Timer? _poll;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Re-read when tracking state changes anywhere (quick action, action://stop,
+    // push command, reconcile) — no polling.
+    GeolocationService.revision.addListener(_refreshStatus);
     _refreshStatus();
     _loadRepositoryData();
-    _poll = Timer.periodic(_pollInterval, (_) => _refreshStatus());
   }
 
   @override
   void dispose() {
-    _poll?.cancel();
+    GeolocationService.revision.removeListener(_refreshStatus);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Resume catches permission changes made in OS settings (which change no
+    // state here, so [GeolocationService.revision] wouldn't fire).
     if (state == AppLifecycleState.resumed) _refreshStatus();
   }
 
+  /// Read-only: reflects tracking state, never changes it. Auto-resume is
+  /// [GeolocationService.reconcile]'s job (startup + app-resume), so a Stop
+  /// from the quick action / action://stop / a push command is never reverted
+  /// by whichever screen happens to be visible.
   Future<void> _refreshStatus() async {
     _TrackingStatus status;
     if (Preferences.instance.getBool(Preferences.deviceRegistered) != true) {
       status = _TrackingStatus.notRegistered;
-    } else if (!await _hasLocationPermission()) {
+    } else if (!await GeolocationService.hasLocationPermission()) {
       // Permission is the blocker — report it, but leave the SDK's persisted
       // "enabled" intent untouched so its native background self-resume
       // (re-init on relaunch) can restart tracking once permission returns.
@@ -70,25 +71,9 @@ class _TrackingCardState extends State<TrackingCard>
     } else if (await GeolocationService.tracker.isTracking()) {
       status = _TrackingStatus.on;
     } else {
-      // Registered and permitted but not running (e.g. permission re-granted
-      // in OS settings mid-session): resume tracking right away. Interim
-      // policy — the office-hours gate will own this decision later.
-      try {
-        await GeolocationService.start();
-        status = _TrackingStatus.on;
-      } catch (e) {
-        registerDebugLog('tracking resume failed: $e');
-        status = _TrackingStatus.off;
-      }
+      status = _TrackingStatus.off;
     }
     if (mounted && status != _status) setState(() => _status = status);
-  }
-
-  /// Check only — never prompt from the home screen.
-  Future<bool> _hasLocationPermission() async {
-    final permission = await Geolocator.checkPermission();
-    return permission == LocationPermission.always ||
-        permission == LocationPermission.whileInUse;
   }
 
   Future<void> _loadRepositoryData() async {
