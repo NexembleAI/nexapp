@@ -207,7 +207,15 @@ class _VisitCaptureScreenState extends State<VisitCaptureScreen> {
     final leads = await CustomersRepository.instance.leadsForCustomer(
       customerId,
     );
-    if (mounted) setState(() => _leads = leads);
+    if (!mounted) return;
+    setState(() {
+      _leads = leads;
+      // Drop any pre-seeded (alert-prefilled) id this customer no longer has:
+      // its chip can't render, so the user can neither see nor untag it — yet
+      // it would still ship in the draft and auto-resolve that lead's alert.
+      final ids = leads.map((l) => l.id).toSet();
+      _selectedLeadIds.retainWhere(ids.contains);
+    });
   }
 
   /// Auto-captured report position (§2.3.3). Check-then-request: capture is
