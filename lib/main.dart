@@ -35,7 +35,7 @@ void main() async {
   await Firebase.initializeApp();
   await Preferences.init();
   await UploadQueue.instance.init();
-  await ConnectivityService.instance.init();
+  ConnectivityService.instance.init();
   await GeolocationService.tracker.init(Preferences.buildConfig());
   // init() is idempotent and won't update an already-installed native config on
   // an upgraded install, so push the current Preferences to the SDK (covers the

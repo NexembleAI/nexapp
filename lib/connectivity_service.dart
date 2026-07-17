@@ -17,8 +17,15 @@ class ConnectivityService {
   bool get isOnline => _online;
 
   // App-lifetime singleton; the status subscription lives for the process.
-  Future<void> init() async {
-    _online = await InternetConnection().hasInternetAccess;
+  //
+  // Deliberately not awaited and not a Future: subscribing already triggers an
+  // immediate check (the package's StreamController.onListen calls
+  // _maybeEmitStatusUpdate), so awaiting hasInternetAccess first would only
+  // block the first frame — by up to the probe timeout on a flaky network.
+  // [_online] starts optimistic and is corrected as soon as that check
+  // resolves; a wrong guess just costs one upload attempt that fails and backs
+  // off.
+  void init() {
     InternetConnection().onStatusChange.listen((status) {
       final online = status == InternetStatus.connected;
       if (online != _online) {
