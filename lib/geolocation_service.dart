@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:traccar_client_sdk/traccar_client_sdk.dart';
 
 import 'preferences.dart';
@@ -5,11 +7,35 @@ import 'preferences.dart';
 class GeolocationService {
   static final tracker = TraccarClientSdk();
 
+  /// Bumped whenever tracking state may have changed (start / stop /
+  /// reconcile), so UI can re-read status instead of polling.
+  static final ValueNotifier<int> revision = ValueNotifier<int>(0);
+
+  /// Whether tracking is *wanted*. Distinct from whether it's running: a
+  /// permission outage must not clear it (so tracking resumes when permission
+  /// comes back), while a deliberate Stop must (so nothing auto-resumes).
+  static bool get intent =>
+      Preferences.instance.getBool(Preferences.trackingIntent) == true;
+
+  static Future<void> setIntent(bool wanted) =>
+      Preferences.instance.setBool(Preferences.trackingIntent, wanted);
+
+  /// True when location permission is sufficient to track (check only —
+  /// never prompts).
+  static Future<bool> hasLocationPermission() async {
+    final permission = await Geolocator.checkPermission();
+    return permission == LocationPermission.always ||
+        permission == LocationPermission.whileInUse;
+  }
+
   /// Starts tracking and stamps [Preferences.trackingStartedAt] (the "Active
   /// since" time on the home card). A start while already tracking keeps the
   /// original stamp; a failed start clears it and rethrows so callers keep
-  /// their error handling.
+  /// their error handling. Also records the intent to track, so every Start
+  /// surface (quick action, deep link, push command, registration) sets it for
+  /// free.
   static Future<void> start() async {
+    await setIntent(true);
     final wasTracking = await tracker.isTracking();
     try {
       await tracker.start();
@@ -22,11 +48,39 @@ class GeolocationService {
     } catch (_) {
       await Preferences.instance.remove(Preferences.trackingStartedAt);
       rethrow;
+    } finally {
+      revision.value++; // success or failure — let the UI re-read
     }
   }
 
+  /// Stops tracking and clears the intent, so nothing auto-resumes it. Every
+  /// Stop surface (quick action, action://stop, push 'positionStop') lands
+  /// here, so they all record the intent for free. Clearing the SDK's own
+  /// persisted "enabled" flag also prevents its native background self-resume
+  /// from reviving a deliberate stop.
   static Future<void> stop() async {
+    await setIntent(false);
     await tracker.stop();
     await Preferences.instance.remove(Preferences.trackingStartedAt);
+    revision.value++;
+  }
+
+  /// Makes the actual tracking state match [intent], given registration and
+  /// permission. The ONLY place allowed to auto-(re)start: called at startup
+  /// and on app-resume, so granting permission in OS settings resumes tracking
+  /// — but only when tracking was actually wanted, so a user/server Stop is
+  /// never reverted. (The office-hours gate becomes another term here.)
+  static Future<void> reconcile() async {
+    if (!intent) return;
+    if (Preferences.instance.getBool(Preferences.deviceRegistered) != true) {
+      return;
+    }
+    if (!await hasLocationPermission()) return;
+    if (await tracker.isTracking()) return;
+    try {
+      await start();
+    } catch (_) {
+      // Best-effort: a failed resume just leaves the card showing "off".
+    }
   }
 }

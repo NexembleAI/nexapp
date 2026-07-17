@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'alerts_repository.dart';
 import 'alerts_screen.dart';
+import 'geolocation_service.dart';
 import 'home_screen.dart';
 import 'l10n/app_localizations.dart';
 import 'reports_screen.dart';
@@ -22,19 +23,29 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _index = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     shellTabRequest.addListener(_onTabRequest);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     shellTabRequest.removeListener(_onTabRequest);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Returning from OS settings is when permission changes — reconcile the
+    // actual tracking state against the persisted intent. Startup + resume are
+    // the only auto-resume triggers; the Home card merely reflects status.
+    if (state == AppLifecycleState.resumed) GeolocationService.reconcile();
   }
 
   void _onTabRequest() {
