@@ -23,6 +23,9 @@ class StatusChip extends StatelessWidget {
         Theme.of(context).colorScheme.primary,
         l.statusUploading,
       ),
+      // Red, not amber: unlike a failed transcript this blocks the report and
+      // needs the user to act.
+      ReportStatus.uploadFailed => (AppTheme.recording, l.statusUploadFailed),
       ReportStatus.transcriptFailed =>
         (AppTheme.warning, l.statusTranscriptFailed),
       ReportStatus.submitted =>

@@ -202,6 +202,7 @@ class QueuedReport {
 enum ReportStatus {
   queued,
   uploading,
+  uploadFailed,
   submitted,
   transcribing,
   ready,
@@ -333,13 +334,18 @@ class ReportEntry {
     this.geofencePresent = true,
   });
 
-  /// A queued/uploading item rendered as a report row in the Reports tab.
+  /// A queued/uploading/failed item rendered as a report row in the Reports
+  /// tab. [id] is the idempotency key, not a server report id — the Reports tab
+  /// never navigates to detail for these statuses, it acts on the queue.
   factory ReportEntry.fromQueued(QueuedReport q) => ReportEntry(
+        id: q.idempotencyKey,
         customerName: q.customerName,
         createdAt: q.createdAt,
-        status: q.status == QueueStatus.uploading
-            ? ReportStatus.uploading
-            : ReportStatus.queued,
+        status: switch (q.status) {
+          QueueStatus.uploading => ReportStatus.uploading,
+          QueueStatus.failed => ReportStatus.uploadFailed,
+          QueueStatus.queued => ReportStatus.queued,
+        },
         hasAudio: q.hasAudio,
         hasNotes: q.hasNotes,
         geofencePresent: false, // manual, no geofence session (§3.3)

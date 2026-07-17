@@ -61,11 +61,35 @@ class _ReportsScreenState extends State<ReportsScreen> {
     if (!_active.remove(f)) _active.add(f);
   });
 
-  /// Server reports open the detail; queued/uploading rows aren't yet
-  /// editable (mid-upload) — show a dialog instead.
+  /// Server reports open the detail; queue rows act on the queue instead —
+  /// queued/uploading aren't yet editable (mid-upload), and a failed upload
+  /// offers a retry. Their `id` is an idempotency key, never a server report
+  /// id, so these branches must come before the detail navigation.
   void _openReport(BuildContext context, ReportEntry r) {
     final l = AppLocalizations.of(context)!;
-    if (r.status == ReportStatus.queued || r.status == ReportStatus.uploading) {
+    if (r.status == ReportStatus.uploadFailed) {
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(l.uploadFailedTitle),
+          content: Text(l.uploadFailedMessage),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(l.cancelButton),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                UploadQueue.instance.retryFailed(r.id!); // idempotency key
+              },
+              child: Text(l.retryButton),
+            ),
+          ],
+        ),
+      );
+    } else if (r.status == ReportStatus.queued ||
+        r.status == ReportStatus.uploading) {
       showDialog<void>(
         context: context,
         builder:
