@@ -65,22 +65,34 @@ class GeolocationService {
     revision.value++;
   }
 
+  static bool _reconciling = false;
+
   /// Makes the actual tracking state match [intent], given registration and
   /// permission. The ONLY place allowed to auto-(re)start: called at startup
   /// and on app-resume, so granting permission in OS settings resumes tracking
   /// — but only when tracking was actually wanted, so a user/server Stop is
   /// never reverted. (The office-hours gate becomes another term here.)
+  ///
+  /// Non-reentrant: overlapping calls (e.g. a resume landing on top of startup)
+  /// would each see `isTracking() == false` and start twice, double-stamping
+  /// [Preferences.trackingStartedAt].
   static Future<void> reconcile() async {
-    if (!intent) return;
-    if (Preferences.instance.getBool(Preferences.deviceRegistered) != true) {
-      return;
-    }
-    if (!await hasLocationPermission()) return;
-    if (await tracker.isTracking()) return;
+    if (_reconciling) return;
+    _reconciling = true;
     try {
-      await start();
-    } catch (_) {
-      // Best-effort: a failed resume just leaves the card showing "off".
+      if (!intent) return;
+      if (Preferences.instance.getBool(Preferences.deviceRegistered) != true) {
+        return;
+      }
+      if (!await hasLocationPermission()) return;
+      if (await tracker.isTracking()) return;
+      try {
+        await start();
+      } catch (_) {
+        // Best-effort: a failed resume just leaves the card showing "off".
+      }
+    } finally {
+      _reconciling = false;
     }
   }
 }
