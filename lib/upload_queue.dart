@@ -71,6 +71,58 @@ class UploadQueue {
     _changes.bump();
   }
 
+  /// Terminal failure. The drain skips it automatically, since [nextPending]
+  /// only ever picks `queued` items.
+  Future<void> markFailed(String id) async {
+    _updateCache(
+      id,
+      (i) => i.copyWith(status: QueueStatus.failed, progress: 0),
+    );
+    await _db!.update(
+      'upload_queue',
+      {'status': QueueStatus.failed.name},
+      where: 'idempotency_key = ?',
+      whereArgs: [id],
+    );
+    _changes.bump();
+  }
+
+  /// Counts retryable failures and returns the new total. Persisted, so the
+  /// retry cap survives a restart.
+  Future<int> bumpAttempt(String id) async {
+    var count = 0;
+    _updateCache(id, (i) {
+      count = i.attemptCount + 1;
+      return i.copyWith(attemptCount: count);
+    });
+    await _db!.update(
+      'upload_queue',
+      {'attempt_count': count},
+      where: 'idempotency_key = ?',
+      whereArgs: [id],
+    );
+    return count;
+  }
+
+  /// Manual retry from the UI: back to `queued` with a fresh attempt budget.
+  Future<void> retryFailed(String id) async {
+    _updateCache(
+      id,
+      (i) => i.copyWith(
+        status: QueueStatus.queued,
+        progress: 0,
+        attemptCount: 0,
+      ),
+    );
+    await _db!.update(
+      'upload_queue',
+      {'status': QueueStatus.queued.name, 'attempt_count': 0},
+      where: 'idempotency_key = ?',
+      whereArgs: [id],
+    );
+    _changes.bump(); // wakes the uploader's drain
+  }
+
   /// Removes the item (row + audio file) on success; returns it for the
   /// uploader to hand to the server-reaction hook.
   Future<QueuedReport?> markUploaded(String id) async {

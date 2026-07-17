@@ -64,12 +64,18 @@ void main() async {
   CustomersRepository.instance = MockCustomersRepository();
   // Uploader drains the queue while online. The POST and the server-reaction
   // are injected simulations (deleted with lib/mock/ + replaced by real HTTP).
-  UploadUploader.instance.simulateUpload = (_) async => true;
+  UploadUploader.instance.upload = (_) async => UploadOutcome.success;
   UploadUploader.instance.onUploaded = (item) {
     reportsMock.addSubmitted(item);
     if (item.leadIds.isNotEmpty) alertsMock.resolveForLeads(item.leadIds);
   };
   UploadUploader.instance.start();
+  // A rejected session pauses the drain; resume once signed in again.
+  AuthService.instance.authState.addListener(() {
+    if (AuthService.instance.authState.value == true) {
+      UploadUploader.instance.resume();
+    }
+  });
   runApp(const MainApp());
 }
 
