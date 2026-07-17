@@ -198,6 +198,14 @@ class _OnboardingGateState extends State<OnboardingGate> {
   Widget build(BuildContext context) {
     if (_done) return widget.child;
     return OnboardingScreen(
+      // Persist as soon as the wizard reaches its last page, not only on the
+      // final tap. RegistrationGate sits behind this gate, so a user who
+      // granted everything and then killed the app would otherwise get no
+      // registration and no tracking that session — and re-enter the wizard.
+      onReachedEnd: () => Preferences.instance.setBool(
+        Preferences.onboardingComplete,
+        true,
+      ),
       onFinish: () async {
         await Preferences.instance.setBool(
           Preferences.onboardingComplete,
