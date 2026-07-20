@@ -75,8 +75,8 @@ class _AlertsScreenState extends State<AlertsScreen> {
         (_alerts ?? [])
             .where(
               (a) =>
-                  a.status == AlertStatus.ack ||
-                  a.status == AlertStatus.snoozed,
+                  a.effectiveStatus == AlertStatus.ack ||
+                  a.effectiveStatus == AlertStatus.snoozed,
             )
             .toList()
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -372,7 +372,8 @@ class _EarlierCard extends StatelessWidget {
     // Both EARLIER chips are neutral/de-emphasized (measured from the mock —
     // snoozed is NOT amber; nothing in the handled section shouts).
     final Widget chip;
-    if (alert.status == AlertStatus.snoozed && alert.snoozeUntil != null) {
+    if (alert.effectiveStatus == AlertStatus.snoozed &&
+        alert.snoozeUntil != null) {
       final date = DateFormat.MMMd(
         Localizations.localeOf(context).toString(),
       ).format(alert.snoozeUntil!);

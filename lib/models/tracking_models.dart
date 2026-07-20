@@ -437,9 +437,35 @@ class LeadAlert {
     this.history = const [],
   });
 
+  /// The backend never flips a snoozed alert back to `open` — the lead-alert
+  /// workflow's only timer is escalation, and nothing reads snooze_until, so
+  /// ListLeadAlerts keeps reporting `snoozed` indefinitely (there is no
+  /// reopen/unsnooze RPC either). Derive the reopen here instead — display
+  /// only, nothing is written back: once [snoozeUntil] has passed, the alert
+  /// is effectively open again.
+  AlertStatus get effectiveStatus =>
+      status == AlertStatus.snoozed &&
+              snoozeUntil != null &&
+              !snoozeUntil!.isAfter(DateTime.now())
+          ? AlertStatus.open
+          : status;
+
   /// True when the alert still demands a decision (top section + badge).
   bool get needsAction =>
-      status == AlertStatus.open || status == AlertStatus.escalated;
+      effectiveStatus == AlertStatus.open ||
+      effectiveStatus == AlertStatus.escalated;
+
+  /// [history] plus a derived `reopened` entry when the snooze has expired. The
+  /// backend records no such event (it never reopens, so ListLeadAlertEvents
+  /// will never carry one) — but [effectiveStatus] did, so the timeline
+  /// explains why the alert is back instead of it just reappearing. Stamped at
+  /// [snoozeUntil]: the moment it became actionable.
+  List<AlertEvent> get timeline =>
+      status == AlertStatus.snoozed &&
+              effectiveStatus == AlertStatus.open &&
+              snoozeUntil != null
+          ? [...history, AlertEvent(AlertEventType.reopened, snoozeUntil!)]
+          : history;
 
   LeadAlert copyWith({
     AlertStatus? status,

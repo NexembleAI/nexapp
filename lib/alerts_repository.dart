@@ -26,6 +26,9 @@ abstract class AlertsRepository {
   /// unresolved until a lead-tagged visit report (or Won/Lost) closes it.
   Future<void> ack(String id);
 
-  /// Defer until [until]; the workflow reopens the alert when it expires.
+  /// Defer until [until]. Nothing reopens it server-side — there is no snooze
+  /// expiry timer and no reopen RPC — so the alert re-surfaces via
+  /// [LeadAlert.effectiveStatus] once [until] passes. Ack (or a lead-tagged
+  /// report) is what actually closes it.
   Future<void> snooze(String id, DateTime until);
 }
