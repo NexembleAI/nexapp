@@ -210,6 +210,15 @@
       }
     }
   },
+  "queueFailedTitle": "Couldn't upload",
+  "queueFailedBody": "We couldn't upload {name}'s report. Open it from Reports to retry.",
+  "@queueFailedBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "uploadQueueLabel": "Upload queue",
   "queueEmpty": "Nothing in the queue",
   "backToHomeButton": "Back to Home",
