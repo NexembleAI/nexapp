@@ -36,10 +36,16 @@ abstract final class AppTheme {
   // NexUI muted-foreground for section labels, measured from the home mocks
   // (indigo-cast in light, neutral gray in dark). Stand-in until the real
   // NexUI token values are available.
+  //
+  // Light value darkened from the measured #6381BE (which was only ~3.8:1 on
+  // the light page/cards — below WCAG AA 4.5:1 for the small text it's used
+  // for) to #596FAE, the minimal darkening of the same muted blue that clears
+  // 4.5:1 on both #FAFBFF (4.71:1) and #FFFFFF (4.87:1). Dark already passes
+  // (~4.7:1), so it's unchanged.
   static Color mutedLabel(Brightness brightness) =>
       brightness == Brightness.dark
           ? const Color(0xFF85858E)
-          : const Color(0xFF6381BE);
+          : const Color(0xFF596FAE);
 
   // Shape
   static const double cardRadius = 18;
