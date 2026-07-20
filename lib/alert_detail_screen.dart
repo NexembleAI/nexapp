@@ -300,7 +300,7 @@ class _Timeline extends StatelessWidget {
 
     // Past events from history…
     final items = <(String, String?, bool)>[
-      for (final e in alert.history)
+      for (final e in alert.timeline)
         switch (e.type) {
           AlertEventType.opened => (
               l.eventOpened,
@@ -323,9 +323,14 @@ class _Timeline extends StatelessWidget {
     ];
 
     // …plus one "current" item by status.
-    switch (alert.status) {
+    switch (alert.effectiveStatus) {
       case AlertStatus.open:
-        final days = alert.escalatesAt == null
+        // Countdown only for a genuinely-open alert: EscalateLeadAlert's CAS
+        // requires status == open, and for a snooze we merely derived as
+        // reopened the workflow's escalation timer has already fired and moved
+        // on — so don't promise an escalation that can't happen.
+        final days =
+            alert.status != AlertStatus.open || alert.escalatesAt == null
             ? null
             : (alert.escalatesAt!.difference(DateTime.now()).inHours / 24)
                 .ceil()
