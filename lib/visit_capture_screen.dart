@@ -286,6 +286,7 @@ class _VisitCaptureScreenState extends State<VisitCaptureScreen> {
       isScrollControlled: true,
       builder: (_) => const _CustomerPickerSheet(),
     );
+    if (!mounted) return;
     if (picked != null && picked.id != _customer?.id) {
       setState(() {
         _customer = picked;
