@@ -336,6 +336,18 @@
   "distanceHelp": "Report a new point after moving at least this far.",
   "intervalLabel": "Update interval",
   "intervalHelp": "How often a position is recorded while tracking",
+  "distanceMetersValue": "{meters} m",
+  "@distanceMetersValue": {
+    "placeholders": { "meters": { "type": "int" } }
+  },
+  "intervalSecondsValue": "{seconds} s",
+  "@intervalSecondsValue": {
+    "placeholders": { "seconds": { "type": "int" } }
+  },
+  "intervalMinutesValue": "{minutes} min",
+  "@intervalMinutesValue": {
+    "placeholders": { "minutes": { "type": "int" } }
+  },
   "deviceSectionLabel": "Device",
   "deviceRegisteredStatus": "Registered to you · provisioned in Traccar",
   "deviceNotRegisteredStatus": "Not registered yet",
