@@ -93,18 +93,36 @@ class QueueConfirmationScreen extends StatelessWidget {
                         (i) => i.idempotencyKey == reportId,
                       );
                       final done = idx < 0;
-                      final uploading =
-                          !done && items[idx].status == QueueStatus.uploading;
-                      final color = done ? AppTheme.success : AppTheme.warning;
+                      final status = done ? null : items[idx].status;
+                      final failed = status == QueueStatus.failed;
+                      final uploading = status == QueueStatus.uploading;
+                      final color = done
+                          ? AppTheme.success
+                          : failed
+                              ? AppTheme.recording
+                              : AppTheme.warning;
+                      final title = done
+                          ? l.queueUploadedTitle
+                          : failed
+                              ? l.queueFailedTitle
+                              : l.queueSavedTitle;
+                      final icon = done
+                          ? Icons.check_circle_outline
+                          : failed
+                              ? Icons.error_outline
+                              : Icons.cloud_upload_outlined;
                       // Copy tracks THIS report's actual state, not just
-                      // connectivity — it may be queued behind others.
+                      // connectivity — it may be queued behind others, or have
+                      // exhausted its retries (failed).
                       final body = done
                           ? l.queueUploadedBody(customerName)
-                          : uploading
-                              ? l.queueUploadingBody(customerName)
-                              : online
-                                  ? l.queueQueuedOnlineBody(customerName)
-                                  : l.queueSavedBody(customerName);
+                          : failed
+                              ? l.queueFailedBody(customerName)
+                              : uploading
+                                  ? l.queueUploadingBody(customerName)
+                                  : online
+                                      ? l.queueQueuedOnlineBody(customerName)
+                                      : l.queueSavedBody(customerName);
                       return Column(
                         children: [
                           Center(
@@ -115,18 +133,12 @@ class QueueConfirmationScreen extends StatelessWidget {
                                 shape: BoxShape.circle,
                                 color: color.withValues(alpha: 0.14),
                               ),
-                              child: Icon(
-                                done
-                                    ? Icons.check_circle_outline
-                                    : Icons.cloud_upload_outlined,
-                                color: color,
-                                size: 34,
-                              ),
+                              child: Icon(icon, color: color, size: 34),
                             ),
                           ),
                           const SizedBox(height: 20),
                           Text(
-                            done ? l.queueUploadedTitle : l.queueSavedTitle,
+                            title,
                             textAlign: TextAlign.center,
                             style: theme.textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.w700,
@@ -235,9 +247,11 @@ class _QueueRow extends StatelessWidget {
         ? _fmtBytes(item.audioSizeBytes!)
         : null;
     final subtitle = [content, size].whereType<String>().join(' · ');
-    final chipStatus = item.status == QueueStatus.uploading
-        ? ReportStatus.uploading
-        : ReportStatus.queued;
+    final chipStatus = switch (item.status) {
+      QueueStatus.uploading => ReportStatus.uploading,
+      QueueStatus.failed => ReportStatus.uploadFailed,
+      QueueStatus.queued => ReportStatus.queued,
+    };
 
     return Padding(
       padding: const EdgeInsets.all(14),
