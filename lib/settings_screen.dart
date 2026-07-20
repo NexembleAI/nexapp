@@ -167,7 +167,6 @@ class _SettingsScreenState extends State<SettingsScreen>
     return best;
   }
 
-  static String _humanInterval(int s) => s < 300 ? '$s s' : '${s ~/ 60} min';
 
   Future<void> _loadDevice() async {
     _deviceId = Preferences.instance.getString(Preferences.id) ?? '';
@@ -215,6 +214,11 @@ class _SettingsScreenState extends State<SettingsScreen>
         ),
       ),
     );
+
+    // Threshold stays in Dart (design: 10 s / 30 s / 60 s / 5 min); the ARB
+    // supplies only the localized unit strings.
+    String humanInterval(int s) =>
+        s < 300 ? l.intervalSecondsValue(s) : l.intervalMinutesValue(s ~/ 60);
 
     final controlLabelStyle = theme.textTheme.bodyMedium?.copyWith(
       fontWeight: FontWeight.w600,
@@ -328,7 +332,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                   helpText(l.distanceHelp),
                   const SizedBox(height: 10),
                   _SegmentedControl<int>(
-                    options: [for (final m in _distancePresets) (m, '$m m')],
+                    options: [
+                      for (final m in _distancePresets)
+                        (m, l.distanceMetersValue(m)),
+                    ],
                     selected: _distancePresets.contains(_distance)
                         ? _distance
                         : _nearestPreset(_distance, _distancePresets),
@@ -343,7 +350,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                     _SegmentedControl<int>(
                       options: [
                         for (final s in _intervalPresets)
-                          (s, _humanInterval(s)),
+                          (s, humanInterval(s)),
                       ],
                       selected: _intervalPresets.contains(_interval)
                           ? _interval
