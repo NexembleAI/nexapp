@@ -21,6 +21,7 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
   Duration _pos = Duration.zero;
   Duration _total = Duration.zero;
   bool _playing = false;
+  bool _ready = false; // true once setAsset resolves; gates the play button
 
   @override
   void initState() {
@@ -31,8 +32,12 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
   Future<void> _init() async {
     try {
       _total = await _player.setAsset(widget.assetPath) ?? Duration.zero;
-      if (mounted) setState(() {});
-    } catch (_) {}
+      if (mounted) setState(() => _ready = true);
+    } catch (_) {
+      // Leave _ready false so the button stays disabled instead of throwing on
+      // tap. (When the source becomes GET …/audio, this is also the "audio
+      // unavailable" state.)
+    }
     _posSub = _player.positionStream.listen((p) {
       if (mounted) setState(() => _pos = p);
     });
@@ -60,13 +65,19 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
   }
 
   Future<void> _toggle() async {
-    if (_playing) {
-      await _player.pause();
-    } else {
-      if (_total > Duration.zero && _pos >= _total) {
-        await _player.seek(Duration.zero);
+    try {
+      if (_playing) {
+        await _player.pause();
+      } else {
+        if (_total > Duration.zero && _pos >= _total) {
+          await _player.seek(Duration.zero);
+        }
+        await _player.play();
       }
-      await _player.play();
+    } catch (_) {
+      // play()/pause() can throw if the source errored (e.g. a network source
+      // that failed after load). Don't surface it unhandled or wedge the icon.
+      if (mounted) setState(() => _playing = false);
     }
   }
 
@@ -91,13 +102,15 @@ class _AudioPlayerBarState extends State<AudioPlayerBar> {
         child: Row(
           children: [
             GestureDetector(
-              onTap: _toggle,
+              onTap: _ready ? _toggle : null,
               child: Container(
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: theme.colorScheme.primary,
+                  color: _ready
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.primary.withValues(alpha: 0.4),
                 ),
                 child: Icon(
                   _playing ? Icons.pause : Icons.play_arrow,
