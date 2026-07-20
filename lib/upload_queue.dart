@@ -255,6 +255,7 @@ class UploadQueue {
 
   /// Deletes audio files with no row, and drops rows whose audio is missing.
   Future<void> _reconcileOrphans() async {
+    // 1. Sweep the queue-owned audio dir: files no live row references.
     final known = _items.map((i) => i.audioPath).whereType<String>().toSet();
     final dir = Directory(_audioDir!);
     await for (final f in dir.list()) {
@@ -264,6 +265,25 @@ class UploadQueue {
         } catch (_) {}
       }
     }
+
+    // 2. Sweep abandoned recorder temp files in the documents root. A recording
+    // that reached the queue was renamed into _audioDir, so any root-level
+    // `visit_note_*` file is one the app died on between stop and enqueue (the
+    // review-state window). Scoped to that prefix + File type so it can never
+    // touch queue_audio/ (a Directory) or anything else in the root. Runs in
+    // init() before any recording this session, so it can't race a live one.
+    try {
+      final docs = Directory(p.dirname(_audioDir!)); // <Documents>
+      await for (final f in docs.list()) {
+        if (f is File && p.basename(f.path).startsWith('visit_note_')) {
+          try {
+            await f.delete();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+
+    // 3. Drop queue rows whose audio file has vanished.
     final missing = <String>[];
     for (final i in _items) {
       final abs = absoluteAudioPath(i);
