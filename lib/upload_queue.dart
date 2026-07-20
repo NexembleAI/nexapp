@@ -225,6 +225,21 @@ class UploadQueue {
       item.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    // Mirror the DB's replace-on-conflict in memory: a reused idempotency_key
+    // collapses to one row in SQLite, so replace an existing entry in place
+    // rather than appending a ghost the DB doesn't have. Callers mint a fresh
+    // key per submit, but a double-tap on Submit could re-enqueue the same
+    // draft before the screen pops — this keeps enqueue() idempotent: the
+    // onEnqueued side effect (e.g. bumping the today-reports count) fires only
+    // on a genuine first insert.
+    final existing = _items.indexWhere(
+      (i) => i.idempotencyKey == item.idempotencyKey,
+    );
+    if (existing >= 0) {
+      _items[existing] = item;
+      _changes.bump();
+      return;
+    }
     _items.insert(0, item);
     _changes.bump();
     onEnqueued?.call(item);
