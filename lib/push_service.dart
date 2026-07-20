@@ -69,6 +69,10 @@ class PushService {
 Future<void> pushServiceBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
   await Preferences.init();
-  await GeolocationService.tracker.init(Preferences.buildConfig());
+  // Same tracker bootstrap as main() — init() alone would leave a migrated
+  // config unapplied in this isolate (idempotent init won't overwrite the
+  // installed native config), so a background position command could use a
+  // stale URL/interval.
+  await GeolocationService.initWithConfig();
   await PushService._onMessage(message);
 }

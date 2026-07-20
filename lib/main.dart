@@ -36,11 +36,7 @@ void main() async {
   await Preferences.init();
   await UploadQueue.instance.init();
   ConnectivityService.instance.init();
-  await GeolocationService.tracker.init(Preferences.buildConfig());
-  // init() is idempotent and won't update an already-installed native config on
-  // an upgraded install, so push the current Preferences to the SDK (covers the
-  // NEX_TRACCAR_URL http->https migration and any future config drift).
-  await GeolocationService.tracker.setConfig(Preferences.buildConfig());
+  await GeolocationService.initWithConfig();
   await PasswordService.migrate();
   await PushService.init();
   // iOS Keychain outlives app reinstall while shared_preferences does not, so a
