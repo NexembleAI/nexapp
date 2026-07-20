@@ -7,6 +7,20 @@ import 'preferences.dart';
 class GeolocationService {
   static final tracker = TraccarClientSdk();
 
+  /// Brings the native SDK config in line with the current [Preferences].
+  /// `init()` is idempotent and won't update an already-installed native config
+  /// on an upgraded install, so the follow-up `setConfig()` pushes the current
+  /// values through (covers the NEX_TRACCAR_URL http->https migration, the
+  /// interval default, and any future config drift). Shared by both entry
+  /// points — main() and the FCM background isolate — so neither can forget the
+  /// setConfig() step (each isolate still runs its own Firebase/Preferences
+  /// init first, since isolate memory isn't shared).
+  static Future<void> initWithConfig() async {
+    final config = Preferences.buildConfig();
+    await tracker.init(config);
+    await tracker.setConfig(config);
+  }
+
   /// Bumped whenever tracking state may have changed (start / stop /
   /// reconcile), so UI can re-read status instead of polling.
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
