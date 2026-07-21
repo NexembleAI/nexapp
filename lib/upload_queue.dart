@@ -230,9 +230,17 @@ class UploadQueue {
       // v2 adds per-item backoff. Existing rows get NULL (= eligible now).
       onUpgrade: (db, oldV, _) async {
         if (oldV < 2) {
-          await db.execute(
-            'ALTER TABLE upload_queue ADD COLUMN next_attempt_at INTEGER',
-          );
+          // Idempotent: only add if absent. A dev downgrade (v2->v1->v2) can
+          // leave the column present with the version rolled back, which would
+          // otherwise make this ALTER throw "duplicate column" and crash the
+          // app on open. Production never downgrades, but the guard is cheap.
+          final cols = await db.rawQuery('PRAGMA table_info(upload_queue)');
+          final hasColumn = cols.any((c) => c['name'] == 'next_attempt_at');
+          if (!hasColumn) {
+            await db.execute(
+              'ALTER TABLE upload_queue ADD COLUMN next_attempt_at INTEGER',
+            );
+          }
         }
       },
     );
