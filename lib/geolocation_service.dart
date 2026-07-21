@@ -74,9 +74,15 @@ class GeolocationService {
   /// from reviving a deliberate stop.
   static Future<void> stop() async {
     await setIntent(false);
-    await tracker.stop();
-    await Preferences.instance.remove(Preferences.trackingStartedAt);
-    revision.value++;
+    try {
+      await tracker.stop();
+      await Preferences.instance.remove(Preferences.trackingStartedAt);
+    } finally {
+      // Success or failure, let the UI re-read (mirrors start()). On a throw
+      // the intent is already cleared, so reconcile() won't revive it; without
+      // this bump the card would keep showing "Active" against a dead session.
+      revision.value++;
+    }
   }
 
   static bool _reconciling = false;
@@ -94,12 +100,22 @@ class GeolocationService {
     if (_reconciling) return;
     _reconciling = true;
     try {
+      // Our cache is a per-isolate snapshot. The FCM background isolate writes
+      // intent (a positionStop/positionPeriodic push) straight to disk without
+      // touching this copy, so re-read from disk before trusting it — otherwise
+      // a server-pushed Stop arriving while we're backgrounded-but-alive looks
+      // like it never happened and we'd revert it on the next resume.
+      await Preferences.instance.reloadCache();
       if (!intent) return;
       if (Preferences.instance.getBool(Preferences.deviceRegistered) != true) {
         return;
       }
       if (!await hasLocationPermission()) return;
       if (await tracker.isTracking()) return;
+      // Re-check right before starting: a Stop that landed during the awaits
+      // above (e.g. a quick action, same isolate so it wrote through the cache)
+      // must win, not be reverted a few milliseconds later.
+      if (!intent) return;
       try {
         await start();
       } catch (_) {
