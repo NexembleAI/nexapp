@@ -779,11 +779,17 @@ class _RecorderCardState extends State<_RecorderCard> {
     try {
       await _ampSub?.cancel();
       _ticker?.cancel();
-      final audio = await widget.service.stop();
+      var audio = await widget.service.stop();
       if (!mounted) return;
-      _audio = audio;
       widget.onRecordingChanged(false);
-      if (audio != null) await _initPlayer(audio);
+      if (audio != null) {
+        await _initPlayer(audio);
+        // _initPlayer decodes the true encoded length into _total; persist it
+        // so the queued report carries the real duration, not the wall-clock
+        // estimate stop() returns.
+        audio = audio.copyWith(duration: _total);
+      }
+      _audio = audio;
       if (!mounted) return;
       setState(() => _state = _RecState.reviewing);
       widget.onChanged(audio);
@@ -796,7 +802,14 @@ class _RecorderCardState extends State<_RecorderCard> {
     final player = AudioPlayer();
     _player = player;
     try {
-      _total = await player.setFilePath(audio.path) ?? audio.duration;
+      // Bounded like every other await on this screen (position 15s, geocode
+      // 8s): this gates setState(reviewing) in _stop, so a stuck decode of a
+      // locked/corrupt file must not freeze the card in a fake "recording"
+      // state. Fall back to the wall-clock estimate on timeout or failed decode.
+      _total = await player
+              .setFilePath(audio.path)
+              .timeout(const Duration(seconds: 3), onTimeout: () => null) ??
+          audio.duration;
     } catch (_) {
       _total = audio.duration;
     }

@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
@@ -80,13 +79,13 @@ class AudioRecorderService {
     if (path == null) return null;
     final file = File(path);
     final size = await file.exists() ? await file.length() : 0;
-    // Prefer the true encoded track length; fall back to wall-clock (which
-    // drifts high — it includes encoder start/stop latency) only if the file
-    // can't be probed.
-    final duration = await _probeDuration(path) ??
-        (_startedAt == null
-            ? Duration.zero
-            : DateTime.now().difference(_startedAt!));
+    // Wall-clock duration (drifts high — it includes encoder start/stop
+    // latency). The capture screen refines this to the true encoded length
+    // using the review player it builds anyway (VisitCaptureScreen._initPlayer),
+    // so stop() stays fast and can't hang on a stuck decode of a locked file.
+    final duration = _startedAt == null
+        ? Duration.zero
+        : DateTime.now().difference(_startedAt!);
     final audio = ReportAudio(
       path: path,
       mimeType: _mime ?? 'application/octet-stream',
@@ -98,20 +97,6 @@ class AudioRecorderService {
           '${audio.duration.inSeconds}s · $path');
     }
     return audio;
-  }
-
-  /// True encoded duration read from the finished file via a short-lived
-  /// player; null when it can't be decoded (edge/platform), so the caller
-  /// falls back to the wall-clock estimate.
-  Future<Duration?> _probeDuration(String path) async {
-    final probe = AudioPlayer();
-    try {
-      return await probe.setFilePath(path);
-    } catch (_) {
-      return null;
-    } finally {
-      await probe.dispose();
-    }
   }
 
   /// Discards the in-progress recording and deletes the temp file.

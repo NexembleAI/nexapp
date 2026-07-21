@@ -43,6 +43,13 @@ class ReportAudio {
     required this.duration,
     required this.sizeBytes,
   });
+
+  ReportAudio copyWith({Duration? duration}) => ReportAudio(
+        path: path,
+        mimeType: mimeType,
+        duration: duration ?? this.duration,
+        sizeBytes: sizeBytes,
+      );
 }
 
 /// Position captured at report time (report_position, §4.4).
