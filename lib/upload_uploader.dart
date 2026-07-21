@@ -75,10 +75,19 @@ class UploadUploader {
     final next = UploadQueue.instance.nextPending;
     if (next == null) return;
     _busy = true;
-    final settled = await _upload(next);
-    _busy = false;
-    // Only continue when this attempt settled the item. A retryable failure
-    // schedules its own backoff rather than re-picking the same row instantly.
+    bool settled = false;
+    try {
+      settled = await _upload(next);
+    } finally {
+      // Always clear _busy, even if _upload throws (a DB/file op could) — one
+      // escaped exception must never leave the drain wedged for the process.
+      _busy = false;
+    }
+    // Only continue when this attempt settled the item, and only after _busy is
+    // cleared — otherwise the recursive call short-circuits on the guard above
+    // and the queue drains one item per trigger instead of continuously. A
+    // retryable failure schedules its own backoff rather than re-picking the
+    // same row instantly.
     if (settled) _maybeDrain();
   }
 
@@ -102,8 +111,17 @@ class UploadUploader {
       UploadQueue.instance.setProgress(id, i / steps);
     }
 
-    final outcome =
-        await (upload?.call(item) ?? Future.value(UploadOutcome.success));
+    UploadOutcome outcome;
+    try {
+      outcome =
+          await (upload?.call(item) ?? Future.value(UploadOutcome.success));
+    } catch (_) {
+      // A real HTTP client throws (SocketException/TimeoutException) for exactly
+      // the transient failures the policy treats as retryable — so a thrown hook
+      // feeds the backoff path rather than escaping as an unhandled async error
+      // and wedging the drain.
+      outcome = UploadOutcome.retryable;
+    }
 
     switch (outcome) {
       case UploadOutcome.success:
