@@ -14,6 +14,11 @@ class UploadQueue {
   UploadQueue._();
   static final UploadQueue instance = UploadQueue._();
 
+  /// Retryable failures (graceful or app-kill-mid-POST) before an item becomes
+  /// terminally failed. Lives here, not on the uploader, so the crash-recovery
+  /// path in [init] enforces the same cap the graceful retry path does.
+  static const int maxAttempts = 11;
+
   Database? _db;
   String? _audioDir;
   final List<QueuedReport> _items = [];
@@ -25,16 +30,39 @@ class UploadQueue {
   Listenable get changes => _changes;
   List<QueuedReport> get items => List.unmodifiable(_items);
 
-  /// Oldest queued item (FIFO), or null.
+  /// Oldest queued item that is *due* (FIFO), or null. Items backing off after
+  /// a retryable failure carry a future [QueuedReport.nextAttemptAt] and are
+  /// skipped until their time comes — so an unrelated drain trigger (a new
+  /// enqueue, a connectivity flap, an app relaunch) can't burn their attempts.
   QueuedReport? get nextPending {
+    final now = DateTime.now();
     QueuedReport? oldest;
     for (final i in _items) {
       if (i.status == QueueStatus.queued &&
+          !(i.nextAttemptAt?.isAfter(now) ?? false) &&
           (oldest == null || i.createdAt.isBefore(oldest.createdAt))) {
         oldest = i;
       }
     }
     return oldest;
+  }
+
+  /// Time until the soonest not-yet-due queued item becomes eligible, or null
+  /// if nothing is backing off. The uploader uses this to set a single wake
+  /// timer instead of a per-failure one.
+  Duration? get durationUntilNextDue {
+    final now = DateTime.now();
+    DateTime? soonest;
+    for (final i in _items) {
+      final at = i.nextAttemptAt;
+      if (i.status == QueueStatus.queued &&
+          at != null &&
+          at.isAfter(now) &&
+          (soonest == null || at.isBefore(soonest))) {
+        soonest = at;
+      }
+    }
+    return soonest?.difference(now);
   }
 
   Future<void> markUploading(String id) async {
@@ -65,6 +93,30 @@ class UploadQueue {
     await _db!.update(
       'upload_queue',
       {'status': QueueStatus.queued.name},
+      where: 'idempotency_key = ?',
+      whereArgs: [id],
+    );
+    _changes.bump();
+  }
+
+  /// Retryable failure: back to `queued`, but not eligible until [dueAt]. The
+  /// due-time is persisted, so the backoff survives a restart and [nextPending]
+  /// skips the item until then — no unrelated drain trigger can re-pick it early.
+  Future<void> markRetry(String id, DateTime dueAt) async {
+    _updateCache(
+      id,
+      (i) => i.copyWith(
+        status: QueueStatus.queued,
+        progress: 0,
+        nextAttemptAt: dueAt,
+      ),
+    );
+    await _db!.update(
+      'upload_queue',
+      {
+        'status': QueueStatus.queued.name,
+        'next_attempt_at': dueAt.millisecondsSinceEpoch,
+      },
       where: 'idempotency_key = ?',
       whereArgs: [id],
     );
@@ -104,7 +156,8 @@ class UploadQueue {
     return count;
   }
 
-  /// Manual retry from the UI: back to `queued` with a fresh attempt budget.
+  /// Manual retry from the UI: back to `queued` with a fresh attempt budget and
+  /// due immediately (clears any leftover backoff time).
   Future<void> retryFailed(String id) async {
     _updateCache(
       id,
@@ -112,11 +165,16 @@ class UploadQueue {
         status: QueueStatus.queued,
         progress: 0,
         attemptCount: 0,
+        clearNextAttempt: true,
       ),
     );
     await _db!.update(
       'upload_queue',
-      {'status': QueueStatus.queued.name, 'attempt_count': 0},
+      {
+        'status': QueueStatus.queued.name,
+        'attempt_count': 0,
+        'next_attempt_at': null,
+      },
       where: 'idempotency_key = ?',
       whereArgs: [id],
     );
@@ -152,7 +210,7 @@ class UploadQueue {
   Future<void> init() async {
     _db = await openDatabase(
       p.join(await getDatabasesPath(), 'upload_queue.db'),
-      version: 1,
+      version: 2,
       onCreate: (db, _) => db.execute('''
         CREATE TABLE upload_queue (
           idempotency_key TEXT PRIMARY KEY,
@@ -165,9 +223,18 @@ class UploadQueue {
           audio_duration_ms INTEGER, audio_size_bytes INTEGER,
           status TEXT NOT NULL,
           attempt_count INTEGER NOT NULL DEFAULT 0,
+          next_attempt_at INTEGER,
           created_at INTEGER NOT NULL
         )
       '''),
+      // v2 adds per-item backoff. Existing rows get NULL (= eligible now).
+      onUpgrade: (db, oldV, _) async {
+        if (oldV < 2) {
+          await db.execute(
+            'ALTER TABLE upload_queue ADD COLUMN next_attempt_at INTEGER',
+          );
+        }
+      },
     );
 
     final docs = await getApplicationDocumentsDirectory();
@@ -180,13 +247,20 @@ class UploadQueue {
       ..addAll(rows.map(QueuedReport.fromMap));
 
     // An upload interrupted by app-kill resumes as queued (idempotency key
-    // makes a re-attempt safe).
+    // makes a re-attempt safe). Count the interrupted attempt: an item that
+    // reliably kills the app mid-POST (e.g. an OOM payload) would otherwise
+    // retry every launch forever, since the graceful retryable cap never sees
+    // it — the process dies before the hook returns. Once it hits the cap, fail
+    // it instead of requeuing.
     for (var i = 0; i < _items.length; i++) {
       if (_items[i].status == QueueStatus.uploading) {
-        _items[i] = _items[i].copyWith(status: QueueStatus.queued);
+        final attempt = _items[i].attemptCount + 1;
+        final status =
+            attempt >= maxAttempts ? QueueStatus.failed : QueueStatus.queued;
+        _items[i] = _items[i].copyWith(status: status, attemptCount: attempt);
         await _db!.update(
           'upload_queue',
-          {'status': QueueStatus.queued.name},
+          {'status': status.name, 'attempt_count': attempt},
           where: 'idempotency_key = ?',
           whereArgs: [_items[i].idempotencyKey],
         );

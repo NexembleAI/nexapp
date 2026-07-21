@@ -112,6 +112,12 @@ class QueuedReport {
   final DateTime createdAt;
   final double progress;
 
+  /// Earliest time this item is eligible to upload again. Set on a retryable
+  /// failure to now + backoff; null means eligible immediately. Persisted so
+  /// the backoff survives a restart and can't be bypassed by an unrelated
+  /// drain trigger — [UploadQueue.nextPending] skips items whose time is future.
+  final DateTime? nextAttemptAt;
+
   const QueuedReport({
     required this.idempotencyKey,
     required this.customerId,
@@ -129,6 +135,7 @@ class QueuedReport {
     this.attemptCount = 0,
     required this.createdAt,
     this.progress = 0,
+    this.nextAttemptAt,
   });
 
   bool get hasAudio => audioPath != null;
@@ -139,6 +146,8 @@ class QueuedReport {
     int? attemptCount,
     double? progress,
     String? audioPath,
+    DateTime? nextAttemptAt,
+    bool clearNextAttempt = false,
   }) =>
       QueuedReport(
         idempotencyKey: idempotencyKey,
@@ -157,6 +166,10 @@ class QueuedReport {
         attemptCount: attemptCount ?? this.attemptCount,
         createdAt: createdAt,
         progress: progress ?? this.progress,
+        // clearNextAttempt wins so a manual retry can reset a future backoff to
+        // "eligible now" (copyWith's `?? this` can't otherwise assign null).
+        nextAttemptAt:
+            clearNextAttempt ? null : (nextAttemptAt ?? this.nextAttemptAt),
       );
 
   Map<String, Object?> toMap() => {
@@ -175,6 +188,7 @@ class QueuedReport {
         'status': status.name,
         'attempt_count': attemptCount,
         'created_at': createdAt.millisecondsSinceEpoch,
+        'next_attempt_at': nextAttemptAt?.millisecondsSinceEpoch,
       };
 
   factory QueuedReport.fromMap(Map<String, Object?> m) => QueuedReport(
@@ -193,6 +207,9 @@ class QueuedReport {
         status: QueueStatus.values.byName(m['status'] as String),
         attemptCount: m['attempt_count'] as int,
         createdAt: DateTime.fromMillisecondsSinceEpoch(m['created_at'] as int),
+        nextAttemptAt: m['next_attempt_at'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(m['next_attempt_at'] as int)
+            : null,
       );
 }
 
