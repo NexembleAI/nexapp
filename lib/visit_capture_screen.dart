@@ -67,6 +67,11 @@ class _VisitCaptureScreenState extends State<VisitCaptureScreen> {
   bool _detected = false;
   List<Lead> _leads = const [];
   final Set<String> _selectedLeadIds = {};
+  // Gates Submit until the current customer's leads have resolved, so a
+  // pre-seeded (alert-prefilled) id can't ship unvetted in the load window.
+  bool _leadsLoaded = false;
+  // Request-generation guard for _loadLeads: only the newest fetch may write.
+  int _leadReqId = 0;
   final TextEditingController _notes = TextEditingController();
 
   ReportPosition? _position;
@@ -95,6 +100,7 @@ class _VisitCaptureScreenState extends State<VisitCaptureScreen> {
 
   bool get _canSubmit =>
       _customer != null &&
+      _leadsLoaded && // don't ship a prefilled lead before it's vetted
       (_audio != null || _notes.text.trim().isNotEmpty) &&
       !_submitting &&
       !_isRecording; // can't submit mid-recording
@@ -204,18 +210,36 @@ class _VisitCaptureScreenState extends State<VisitCaptureScreen> {
   }
 
   Future<void> _loadLeads(String customerId) async {
-    final leads = await CustomersRepository.instance.leadsForCustomer(
-      customerId,
-    );
-    if (!mounted) return;
-    setState(() {
-      _leads = leads;
-      // Drop any pre-seeded (alert-prefilled) id this customer no longer has:
-      // its chip can't render, so the user can neither see nor untag it — yet
-      // it would still ship in the draft and auto-resolve that lead's alert.
-      final ids = leads.map((l) => l.id).toSet();
-      _selectedLeadIds.retainWhere(ids.contains);
-    });
+    // Generation guard: only the newest request may write. If the user switches
+    // customers mid-fetch, a slow earlier response can't paint its leads under
+    // the current customer or flip _leadsLoaded prematurely.
+    final reqId = ++_leadReqId;
+    try {
+      final leads = await CustomersRepository.instance.leadsForCustomer(
+        customerId,
+      );
+      if (!mounted || reqId != _leadReqId) return;
+      setState(() {
+        _leads = leads;
+        // Drop any pre-seeded (alert-prefilled) id this customer no longer has:
+        // its chip can't render, so the user can neither see nor untag it — yet
+        // it would still ship in the draft and auto-resolve that lead's alert.
+        final ids = leads.map((l) => l.id).toSet();
+        _selectedLeadIds.retainWhere(ids.contains);
+        _leadsLoaded = true;
+      });
+    } catch (_) {
+      // Fetch failed (matters once the repo is network-backed): degrade to "no
+      // known leads" and submit untagged. Still mark loaded, or _canSubmit's
+      // gate would leave Submit disabled forever. Dropping the prefilled ids is
+      // the safe choice — we can't vet them here, so we don't ship them.
+      if (!mounted || reqId != _leadReqId) return;
+      setState(() {
+        _leads = const [];
+        _selectedLeadIds.clear();
+        _leadsLoaded = true;
+      });
+    }
   }
 
   /// Auto-captured report position (§2.3.3). Check-then-request: capture is
@@ -293,6 +317,7 @@ class _VisitCaptureScreenState extends State<VisitCaptureScreen> {
         _detected = false; // user choice overrides any detection
         _leads = const [];
         _selectedLeadIds.clear(); // old customer's leads are meaningless
+        _leadsLoaded = false; // re-arm the Submit gate for the new fetch
       });
       _loadLeads(picked.id);
     }
