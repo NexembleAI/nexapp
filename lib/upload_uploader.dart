@@ -19,10 +19,9 @@ class UploadUploader {
   UploadUploader._();
   static final UploadUploader instance = UploadUploader._();
 
-  /// Retryable failures before an item becomes terminally failed. With
-  /// [_backoff] the delays run 1,2,4,…,256,300s — roughly a 13-minute window,
-  /// enough to ride out a deploy or a blip before bothering the user.
-  static const int maxAttempts = 11;
+  /// Retry cap ([UploadQueue.maxAttempts]) with [_backoff] gives delays of
+  /// 1,2,4,…,256,300s — roughly a 13-minute window, enough to ride out a deploy
+  /// or a blip before bothering the user.
   static const Duration _maxBackoff = Duration(minutes: 5);
 
   /// The upload itself, classified. Injected; real HTTP later.
@@ -49,13 +48,14 @@ class UploadUploader {
   }
 
   void _onChange() {
-    if (!ConnectivityService.instance.isOnline) {
-      // Going offline only stops us *starting* work: cancel a pending retry.
-      // An in-flight upload is deliberately left alone — its outcome decides
-      // the item's fate (the request will simply fail if the network is gone).
-      _retryTimer?.cancel();
-    } else {
+    if (ConnectivityService.instance.isOnline) {
       _maybeDrain();
+    } else {
+      // Going offline: drop the wake timer (we can't upload now anyway). The
+      // per-item backoff lives in the DB (next_attempt_at), so nothing is lost
+      // — the next online edge re-reads it and drains or reschedules. An
+      // in-flight upload is left alone: its outcome decides the item's fate.
+      _retryTimer?.cancel();
     }
   }
 
@@ -65,15 +65,24 @@ class UploadUploader {
         seconds: min(pow(2, attempt - 1).toInt(), _maxBackoff.inSeconds),
       );
 
-  void _scheduleRetry(Duration delay) {
+  /// A single timer that wakes the drain when the soonest backing-off item
+  /// becomes due. Replaces a per-failure timer, so the backoff is driven by the
+  /// persisted next_attempt_at rather than a fragile in-memory schedule.
+  void _scheduleWake() {
     _retryTimer?.cancel();
-    _retryTimer = Timer(delay, _maybeDrain);
+    final delay = UploadQueue.instance.durationUntilNextDue;
+    if (delay == null) return; // nothing backing off
+    _retryTimer = Timer(delay.isNegative ? Duration.zero : delay, _maybeDrain);
   }
 
   Future<void> _maybeDrain() async {
     if (_busy || _paused || !ConnectivityService.instance.isOnline) return;
     final next = UploadQueue.instance.nextPending;
-    if (next == null) return;
+    if (next == null) {
+      // Nothing due right now; arm the wake for the soonest backing-off item.
+      _scheduleWake();
+      return;
+    }
     _busy = true;
     bool settled = false;
     try {
@@ -83,12 +92,16 @@ class UploadUploader {
       // escaped exception must never leave the drain wedged for the process.
       _busy = false;
     }
-    // Only continue when this attempt settled the item, and only after _busy is
-    // cleared — otherwise the recursive call short-circuits on the guard above
-    // and the queue drains one item per trigger instead of continuously. A
-    // retryable failure schedules its own backoff rather than re-picking the
-    // same row instantly.
-    if (settled) _maybeDrain();
+    if (settled) {
+      // Keep draining any other due items — only after _busy is cleared, or the
+      // recursive call short-circuits on the guard above and the queue drains
+      // one item per trigger instead of continuously.
+      _maybeDrain();
+    } else {
+      // Backed off (retryable) or paused (unauthenticated): arm the wake so the
+      // item resumes when its next_attempt_at comes, without re-picking it now.
+      _scheduleWake();
+    }
   }
 
   /// Returns true when the item is settled and the drain should move on.
@@ -145,12 +158,15 @@ class UploadUploader {
         // Safe to retry liberally: SubmitVisitReport is idempotent on
         // idempotency_key, so a retry reuses the server row, never duplicates.
         final attempt = await UploadQueue.instance.bumpAttempt(id);
-        if (attempt >= maxAttempts) {
+        if (attempt >= UploadQueue.maxAttempts) {
           await UploadQueue.instance.markFailed(id);
           return true;
         }
-        await UploadQueue.instance.markQueued(id);
-        _scheduleRetry(_backoff(attempt));
+        // Stamp the next-eligible time on the item so the backoff can't be
+        // bypassed by an unrelated drain trigger; the wake timer is only an
+        // optimization on top of this persisted schedule.
+        await UploadQueue.instance
+            .markRetry(id, DateTime.now().add(_backoff(attempt)));
         return false;
     }
   }
