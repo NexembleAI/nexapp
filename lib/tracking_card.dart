@@ -79,7 +79,7 @@ class _TrackingCardState extends State<TrackingCard>
   Future<void> _loadRepositoryData() async {
     final results = await Future.wait([
       TrackingRepository.instance.officeHours(),
-      TrackingRepository.instance.todayActivity(),
+      TrackingRepository.instance.weeklyActivity(),
     ]);
     if (!mounted) return;
     setState(() {

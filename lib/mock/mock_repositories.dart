@@ -486,8 +486,9 @@ class MockTrackingRepository implements TrackingRepository {
   }
 
   @override
-  Future<List<double>> todayActivity() async {
+  Future<List<double>> weeklyActivity() async {
     await Future.delayed(_latency);
-    return const [0.3, 0.5, 0.4, 0.7, 0.6, 0.9, 0.5, 0.8, 0.6, 0.4, 0.3, 0.2];
+    // Visits-per-day over the last 7 days (oldest first; last = today).
+    return const [0.4, 0.7, 0.5, 0.9, 0.6, 0.8, 0.3];
   }
 }
