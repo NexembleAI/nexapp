@@ -78,6 +78,25 @@ class AuthService {
     return _refresh();
   }
 
+  /// Forces a token refresh regardless of the cached access token's expiry.
+  /// Used by [VisitReportClient] after a server-side 401 — a rejected or
+  /// clock-skewed access token that [accessToken] wouldn't otherwise refresh.
+  /// Returns the new access token, or null if the refresh token is gone/rejected
+  /// (in which case [logout] has already run and flipped [authState] to false).
+  Future<String?> refreshToken() => _refresh();
+
+  /// Marks the current session as rejected by the server: flips [authState] to
+  /// false so the login screen shows and the upload drain's resume edge fires on
+  /// the next sign-in. Unlike [logout] it makes no network call and leaves the
+  /// stored refresh token for a manual re-login to overwrite.
+  ///
+  /// Closes a latent gap: before P2.1 nothing but [logout] wrote
+  /// `authState = false`, so a server-rejected session could pause the drain
+  /// with no edge to ever resume it.
+  void markSessionRejected() {
+    authState.value = false;
+  }
+
   Future<String?> _refresh() async {
     final refresh = await _storage.read(key: _kRefresh);
     if (refresh == null || refresh.isEmpty) return null;
