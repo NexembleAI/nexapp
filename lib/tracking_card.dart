@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'geolocation_service.dart';
+import 'home_controller.dart';
 import 'l10n/app_localizations.dart';
 import 'models/tracking_models.dart';
 import 'preferences.dart';
@@ -37,13 +38,21 @@ class _TrackingCardState extends State<TrackingCard>
     GeolocationService.revision.addListener(_refreshStatus);
     _refreshStatus();
     _loadRepositoryData();
+    // Refresh the activity graph when Home reloads (pull / focus / resume).
+    HomeController.instance.addListener(_reloadActivity);
   }
 
   @override
   void dispose() {
+    HomeController.instance.removeListener(_reloadActivity);
     GeolocationService.revision.removeListener(_refreshStatus);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  Future<void> _reloadActivity() async {
+    final activity = await TrackingRepository.instance.weeklyActivity();
+    if (mounted) setState(() => _activity = activity);
   }
 
   @override

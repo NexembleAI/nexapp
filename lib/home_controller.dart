@@ -29,7 +29,7 @@ class HomeController extends ChangeNotifier {
   Map<String, String> _names = const {};
 
   DateTime? _loadedAt;
-  bool _loading = false;
+  Future<void>? _inflight;
   bool _error = false;
 
   bool get hasData => _loadedAt != null;
@@ -54,11 +54,13 @@ class HomeController extends ChangeNotifier {
   }
 
   /// Full refresh: 3 lists in parallel, then one CRM resolve for the visible
-  /// visits. Concurrent calls coalesce. Never throws — failure sets [hasError]
-  /// and keeps any prior data.
-  Future<void> refresh() async {
-    if (_loading) return;
-    _loading = true;
+  /// visits. Concurrent calls coalesce onto the same in-flight future (so a
+  /// widget's ensureLoaded actually awaits the load). Never throws — failure
+  /// sets [hasError] and keeps any prior data.
+  Future<void> refresh() =>
+      _inflight ??= _run().whenComplete(() => _inflight = null);
+
+  Future<void> _run() async {
     try {
       final res = await Future.wait([
         _list('visit/session', 'sessions'),
@@ -90,7 +92,6 @@ class HomeController extends ChangeNotifier {
       // data is kept; hasError only surfaces when there's nothing cached.
       _error = true;
     } finally {
-      _loading = false;
       notifyListeners();
     }
   }
@@ -183,4 +184,11 @@ class HomeController extends ChangeNotifier {
 
   static bool _sameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+/// Thrown by the Home repos when the coordinator has no data AND the last load
+/// failed, so a widget shows its error state. A load with cached data never
+/// throws (stale data is returned instead).
+class HomeDataException implements Exception {
+  const HomeDataException();
 }

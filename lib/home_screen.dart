@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'auth_service.dart';
+import 'home_controller.dart';
 import 'l10n/app_localizations.dart';
 import 'today_stats_row.dart';
 import 'today_visits_list.dart';
@@ -42,12 +43,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final username = clean(claims['preferred_username']);
     final display = given ?? name?.split(' ').first ?? username;
     final initialsSource = name ?? display ?? '';
-    final initials = initialsSource
-        .split(RegExp(r'\s+'))
-        .where((w) => w.isNotEmpty)
-        .take(2)
-        .map((w) => w[0].toUpperCase())
-        .join();
+    final initials =
+        initialsSource
+            .split(RegExp(r'\s+'))
+            .where((w) => w.isNotEmpty)
+            .take(2)
+            .map((w) => w[0].toUpperCase())
+            .join();
     setState(() {
       _firstName = display;
       _initials = initials;
@@ -67,9 +69,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final theme = Theme.of(context);
     final locale = Localizations.localeOf(context).toString();
     final date = DateFormat('EEEE, MMMM d', locale).format(DateTime.now());
-    final greeting = _firstName == null
-        ? _greeting(l)
-        : '${_greeting(l)}, $_firstName';
+    final greeting =
+        _firstName == null ? _greeting(l) : '${_greeting(l)}, $_firstName';
 
     return Scaffold(
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
@@ -86,9 +87,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const VisitCaptureScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => const VisitCaptureScreen()),
               );
             },
             icon: const Icon(Icons.add),
@@ -97,37 +96,42 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       body: SafeArea(
-        child: ListView(
-          // Extra bottom inset so the last row scrolls clear of the button.
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-          children: [
-            Text(
-              date,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+        child: RefreshIndicator(
+          onRefresh: () => HomeController.instance.refresh(),
+          child: ListView(
+            // Extra bottom inset so the last row scrolls clear of the button.
+            // AlwaysScrollable so pull-to-refresh works even when content fits.
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+            children: [
+              Text(
+                date,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
-            ),
-            const SizedBox(height: 2),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    greeting,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      greeting,
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-                _Avatar(initials: _initials),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const TrackingCard(),
-            const SizedBox(height: 16),
-            const TodayStatsRow(),
-            const SizedBox(height: 20),
-            const TodayVisitsList(),
-          ],
+                  _Avatar(initials: _initials),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const TrackingCard(),
+              const SizedBox(height: 16),
+              const TodayStatsRow(),
+              const SizedBox(height: 20),
+              const TodayVisitsList(),
+            ],
+          ),
         ),
       ),
     );

@@ -26,6 +26,14 @@ class _TodayVisitsListState extends State<TodayVisitsList> {
   void initState() {
     super.initState();
     _load();
+    // Re-read on a Home refresh (pull / focus / resume / upload).
+    ReportsRepository.instance.changes.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    ReportsRepository.instance.changes.removeListener(_load);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -93,13 +101,16 @@ class _VisitRow extends StatelessWidget {
     final time = MaterialLocalizations.of(context)
         .formatTimeOfDay(TimeOfDay.fromDateTime(visit.enteredAt));
     final status = visit.status; // local promotes the null-check for StatusChip
+    final name = visit.customerName.isEmpty
+        ? l.unnamedCustomer // CRM resolver off / unknown id
+        : visit.customerName;
 
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Row(
         children: [
           EntityAvatar(
-            name: visit.customerName,
+            name: name,
             color: theme.colorScheme.primary,
           ),
           const SizedBox(width: 12),
@@ -108,7 +119,7 @@ class _VisitRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  visit.customerName,
+                  name,
                   style: theme.textTheme.bodyLarge?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
