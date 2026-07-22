@@ -24,8 +24,19 @@ double _clamp01(double v) => v.clamp(0.0, 1.0);
 // Decaying-bounce keyframes (seconds): drop in from the top, then four bounces
 // of decreasing height, settling on the floor. Heights are "units above rest"
 // (ported from the reference scene's bounce curve, retimed for ~3.5s).
-const List<double> _bTimes =   [0.0, 0.60, 1.05, 1.50, 1.85, 2.10, 2.40, 2.55, 2.72, 2.90];
-const List<double> _bHeights = [1383, 0,   603,  0,    403,  0,    193,  0,    63,   0];
+const List<double> _bTimes = [
+  0.0,
+  0.60,
+  1.05,
+  1.50,
+  1.85,
+  2.10,
+  2.40,
+  2.55,
+  2.72,
+  2.90,
+];
+const List<double> _bHeights = [1383, 0, 603, 0, 403, 0, 193, 0, 63, 0];
 const List<double> _contacts = [0.60, 1.50, 2.10, 2.55, 2.90];
 
 double _bounceHeight(double s) {
@@ -35,7 +46,8 @@ double _bounceHeight(double s) {
     if (s >= _bTimes[i] && s <= _bTimes[i + 1]) {
       final local = (s - _bTimes[i]) / (_bTimes[i + 1] - _bTimes[i]);
       final rising = _bHeights[i + 1] > _bHeights[i];
-      final e = rising ? _easeOutQuad(local) : _easeInQuad(local); // gravity feel
+      final e =
+          rising ? _easeOutQuad(local) : _easeInQuad(local); // gravity feel
       return _bHeights[i] + (_bHeights[i + 1] - _bHeights[i]) * e;
     }
   }
@@ -107,8 +119,8 @@ class _NexembleRevealState extends State<NexembleReveal>
       vsync: this,
       duration: const Duration(milliseconds: 3600),
     )..addStatusListener((status) {
-        if (status == AnimationStatus.completed) widget.onCompleted();
-      });
+      if (status == AnimationStatus.completed) widget.onCompleted();
+    });
     _controller.forward();
   }
 
@@ -126,108 +138,121 @@ class _NexembleRevealState extends State<NexembleReveal>
         final s = _controller.value * _dur;
         final overlayOpacity =
             1.0 - _clamp01((s - _fadeStart) / (_fadeEnd - _fadeStart));
-        return Opacity(
-          opacity: overlayOpacity,
-          child: LayoutBuilder(
-            builder: (context, c) {
-              final w = c.maxWidth, h = c.maxHeight;
-              final floorY = h * 0.65;
-              final cube = math.min(w, h) * 0.42;
-              final restTop = floorY - cube; // cube's base rests on the floor
-              final hUnit = floorY / 1383.0; // drop starts just above the top
-              final top = restTop - _bounceHeight(s) * hUnit;
+        // Opacity(0) still HIT-TESTS its child, so without this the fully
+        // faded overlay keeps eating taps meant for the app beneath it until
+        // RevealGate unmounts it — an invisible input-blocker. Block input
+        // while visible (intended splash behavior), pass it through once the
+        // fade has effectively completed.
+        return IgnorePointer(
+          ignoring: overlayOpacity < 0.05,
+          child: Opacity(
+            opacity: overlayOpacity,
+            child: LayoutBuilder(
+              builder: (context, c) {
+                final w = c.maxWidth, h = c.maxHeight;
+                final floorY = h * 0.65;
+                final cube = math.min(w, h) * 0.42;
+                final restTop = floorY - cube; // cube's base rests on the floor
+                final hUnit = floorY / 1383.0; // drop starts just above the top
+                final top = restTop - _bounceHeight(s) * hUnit;
 
-              final sq = _squash(s);
-              final sx = 1 + sq * 0.15;
-              final sy = 1 - sq * 0.24;
+                final sq = _squash(s);
+                final sx = 1 + sq * 0.15;
+                final sy = 1 - sq * 0.24;
 
-              // subtle 3D wobble that decays after the cube settles
-              final amp = (1 - _clamp01((s - 0.6) / 2.4)) * 0.13;
-              final ry = amp * math.sin(s * 3.0 + 0.4);
-              final rz = amp * 0.5 * math.sin(s * 1.9);
+                // subtle 3D wobble that decays after the cube settles
+                final amp = (1 - _clamp01((s - 0.6) / 2.4)) * 0.13;
+                final ry = amp * math.sin(s * 3.0 + 0.4);
+                final rz = amp * 0.5 * math.sin(s * 1.9);
 
-              final cubeBottom = top + cube;
-              final close = _clamp01(1 - (floorY - cubeBottom) / (h * 0.16));
-              final shW = cube * (0.72 + 0.5 * close) * sx;
-              final shH = shW * 0.18;
-              final shOp = 0.05 + 0.22 * close;
-              final cx = w / 2;
+                final cubeBottom = top + cube;
+                final close = _clamp01(1 - (floorY - cubeBottom) / (h * 0.16));
+                final shW = cube * (0.72 + 0.5 * close) * sx;
+                final shH = shW * 0.18;
+                final shOp = 0.05 + 0.22 * close;
+                final cx = w / 2;
 
-              return Stack(
-                children: [
-                  // light surface with a soft floor tint
-                  const Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Color(0xFFFFFFFF),
-                            Color(0xFFFFFFFF),
-                            Color(0xFFEEF1F8),
-                            Color(0xFFE4E8F4),
-                          ],
-                          stops: [0.0, 0.64, 0.66, 1.0],
+                return Stack(
+                  children: [
+                    // light surface with a soft floor tint
+                    const Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Color(0xFFFFFFFF),
+                              Color(0xFFFFFFFF),
+                              Color(0xFFEEF1F8),
+                              Color(0xFFE4E8F4),
+                            ],
+                            stops: [0.0, 0.64, 0.66, 1.0],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  // floor highlight line
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    top: floorY - 1,
-                    height: 2,
-                    child: const DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [Color(0x00FFFFFF), Color(0xE6FFFFFF), Color(0x00FFFFFF)],
+                    // floor highlight line
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: floorY - 1,
+                      height: 2,
+                      child: const DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Color(0x00FFFFFF),
+                              Color(0xE6FFFFFF),
+                              Color(0x00FFFFFF),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  // contact shadow
-                  Positioned(
-                    left: cx - shW / 2,
-                    top: floorY - shH / 2,
-                    width: shW,
-                    height: shH,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: RadialGradient(
-                          colors: [
-                            Color.fromRGBO(30, 33, 120, shOp),
-                            const Color(0x001E2178),
-                          ],
-                          stops: const [0.0, 0.72],
+                    // contact shadow
+                    Positioned(
+                      left: cx - shW / 2,
+                      top: floorY - shH / 2,
+                      width: shW,
+                      height: shH,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: RadialGradient(
+                            colors: [
+                              Color.fromRGBO(30, 33, 120, shOp),
+                              const Color(0x001E2178),
+                            ],
+                            stops: const [0.0, 0.72],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  // the bouncing cube
-                  Positioned(
-                    left: cx - cube / 2,
-                    top: top,
-                    width: cube,
-                    height: cube,
-                    child: Transform(
-                      alignment: Alignment.center,
-                      transform: Matrix4.identity()
-                        ..setEntry(3, 2, 0.0012)
-                        ..rotateY(ry)
-                        ..rotateZ(rz),
-                      child: Transform.scale(
-                        scaleX: sx,
-                        scaleY: sy,
-                        alignment: Alignment.bottomCenter,
-                        child: _cube,
+                    // the bouncing cube
+                    Positioned(
+                      left: cx - cube / 2,
+                      top: top,
+                      width: cube,
+                      height: cube,
+                      child: Transform(
+                        alignment: Alignment.center,
+                        transform:
+                            Matrix4.identity()
+                              ..setEntry(3, 2, 0.0012)
+                              ..rotateY(ry)
+                              ..rotateZ(rz),
+                        child: Transform.scale(
+                          scaleX: sx,
+                          scaleY: sy,
+                          alignment: Alignment.bottomCenter,
+                          child: _cube,
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              );
-            },
+                  ],
+                );
+              },
+            ),
           ),
         );
       },
