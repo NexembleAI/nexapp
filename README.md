@@ -19,6 +19,31 @@
 > git merge upstream/main   # upstream's default branch
 > ```
 
+## Building & Running (Nexapp)
+
+The Android build has **product flavors** (`dev` / `prod`) so each environment ships its
+own Firebase config (`android/app/src/{dev,prod}/google-services.json`). Because a flavored
+Android project has no default flavor, **`flutter run` must be given a `--flavor`** — a plain
+`flutter run` fails with *"Gradle build failed to produce an .apk file"*.
+
+```bash
+flutter pub get
+
+# Android — a flavor is REQUIRED
+flutter run --flavor dev      # nexemble-tracker-dev Firebase
+flutter run --flavor prod     # nexemble-tracker-prod Firebase
+
+# iOS — schemes handle the environment; no --flavor needed
+flutter run
+```
+
+VS Code users can pick **nexapp (dev)** / **nexapp (prod)** from the Run panel
+(`.vscode/launch.json`) instead of passing the flag by hand.
+
+> If a stale unflavored `app-debug.apk` exists from before the flavor migration, `flutter run`
+> may silently install *that* instead of your build. Run `flutter clean` once if the app on the
+> device doesn't reflect your latest code.
+
 ## Overview
 
 Traccar Client is a GPS tracking app for Android and iOS. It runs in the background and sends location updates to your own server using the open-source Traccar platform.
