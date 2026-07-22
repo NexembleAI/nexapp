@@ -7,6 +7,13 @@ import 'tracking_dto.dart';
 class DeviceService {
   DeviceService._();
 
+  // Office hours is effectively static (set at register), and both the Home
+  // card and Settings fetch it at startup — so cache it (cold-start only) and
+  // coalesce concurrent fetches into one /device GET. Only a clean fetch is
+  // cached; a failed call returns the default WITHOUT caching, so it retries.
+  static OfficeHours? _cachedHours;
+  static Future<OfficeHours>? _inflightHours;
+
   /// This phone's office-hours window, derived from its ACTIVE device row
   /// (ListDevices). Always returns a concrete value:
   ///   • today's window if the schedule has one,
@@ -14,7 +21,14 @@ class DeviceService {
   ///   • [OfficeHours.defaultHours] (9:00–17:30) when there's no schedule at all,
   ///     or the device isn't found, or the call fails.
   /// The phone is matched by unique_id (== Preferences.id, the RegisterDevice id).
-  static Future<OfficeHours> fetchOfficeHours() async {
+  static Future<OfficeHours> fetchOfficeHours() {
+    final cached = _cachedHours;
+    if (cached != null) return Future.value(cached);
+    return _inflightHours ??=
+        _fetchOfficeHours().whenComplete(() => _inflightHours = null);
+  }
+
+  static Future<OfficeHours> _fetchOfficeHours() async {
     try {
       final myId = Preferences.instance.getString(Preferences.id);
       final raw = await TrackingApiClient.instance.get('device');
@@ -40,11 +54,15 @@ class DeviceService {
         }
       }
       final match = byId ?? anyActive ?? anyDevice;
-      return OfficeHours.tryFromDeviceJson(
+      final result = OfficeHours.tryFromDeviceJson(
               match == null ? null : Wire.string(match, 'office_hours')) ??
           OfficeHours.defaultHours;
+      _cachedHours = result; // clean fetch (incl. a legit default/closed) — cache
+      return result;
     } on ApiException {
-      return OfficeHours.defaultHours; // neutral badge; don't fail the card load
+      // Don't cache: a transient failure must not pin the badge to the default
+      // for the whole session — retry on the next call (e.g. reopening Settings).
+      return OfficeHours.defaultHours;
     }
   }
 }

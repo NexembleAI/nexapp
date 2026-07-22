@@ -12,7 +12,8 @@ import 'tracking_repository.dart';
 enum _TrackingStatus { on, notRegistered, noPermission, off }
 
 /// Hero card on Home (design screen 04): live tracking status over the brand
-/// spectrum gradient, the office-hours window, and today's activity bars.
+/// spectrum gradient, the office-hours window, and a 7-day activity graph
+/// (visits per day; last bar = today).
 /// Status is re-checked on app resume and on a short poll, since tracking is
 /// app-controlled and can change right after launch (registration gate) or
 /// while backgrounded (OS permission change).

@@ -122,8 +122,14 @@ class CrmNameResolver {
       _merge(_customers, custIds, j['customers'], now);
       _merge(_leads, leadIds, j['leads'], now);
       return true;
-    } on ApiException catch (e) {
-      if (e.kind == ApiErrorKind.unavailable) _mutedUntil = now.add(_cooldown);
+    } catch (e) {
+      // Catch-all: names are best-effort, so NOTHING here may escape and fail
+      // the caller's Home refresh (a malformed body / parse error would too,
+      // not just an ApiException). Only Unavailable (resolver off) arms the
+      // cooldown; other errors just degrade to ids and retry next time.
+      if (e is ApiException && e.kind == ApiErrorKind.unavailable) {
+        _mutedUntil = now.add(_cooldown);
+      }
       developer.log('CrmNameResolver: resolve failed ($e) - showing ids');
       return false;
     }

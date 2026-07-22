@@ -22,6 +22,9 @@ class HomeController extends ChangeNotifier {
   // so the windowing below is client-side.
   static const int _pageSize = 500;
   static const Duration _staleAfter = Duration(seconds: 45);
+  // After an attempt, ensureLoaded() backs off this long before another (a
+  // burst of change-notifies must not each kick a fresh failed refresh).
+  static const Duration _minRetryGap = Duration(seconds: 3);
 
   List<VisitSessionDto> _sessions = const [];
   List<VisitReportDto> _reports = const [];
@@ -29,6 +32,7 @@ class HomeController extends ChangeNotifier {
   Map<String, String> _names = const {};
 
   DateTime? _loadedAt;
+  DateTime? _lastAttemptAt;
   Future<void>? _inflight;
   bool _error = false;
 
@@ -40,8 +44,22 @@ class HomeController extends ChangeNotifier {
   // ── refresh entry points ───────────────────────────────────────────────
 
   /// Load once if we've never loaded; otherwise a no-op (cheap for a widget's
-  /// initState).
-  Future<void> ensureLoaded() => hasData ? Future.value() : refresh();
+  /// initState, and for the change-notify re-reads).
+  Future<void> ensureLoaded() {
+    if (hasData) return Future.value();
+    final inflight = _inflight;
+    if (inflight != null) return inflight; // coalesce onto the running load
+    // No data + not loading: only start a refresh if we haven't just tried.
+    // Without this, a failed load's notifyListeners fans out to every widget,
+    // each calling ensureLoaded -> refresh the moment _inflight clears — a tight
+    // offline retry storm. An explicit refresh()/refreshIfStale (pull, focus,
+    // resume, upload) bypasses this gap.
+    final last = _lastAttemptAt;
+    if (last != null && DateTime.now().difference(last) < _minRetryGap) {
+      return Future.value();
+    }
+    return refresh();
+  }
 
   /// Refresh only if the cache is older than [_staleAfter] — for tab-focus and
   /// app-resume, so switching back to Home doesn't always hit the network.
@@ -61,6 +79,7 @@ class HomeController extends ChangeNotifier {
       _inflight ??= _run().whenComplete(() => _inflight = null);
 
   Future<void> _run() async {
+    _lastAttemptAt = DateTime.now();
     try {
       final res = await Future.wait([
         _list('visit/session', 'sessions'),
@@ -86,11 +105,14 @@ class HomeController extends ChangeNotifier {
       _names = names;
       _loadedAt = DateTime.now();
       _error = false;
-    } catch (_) {
+    } catch (e, st) {
       // Fail-together: one failed list blanks the refresh rather than showing an
       // inconsistent snapshot (e.g. sessions with their reports missing). Prior
-      // data is kept; hasError only surfaces when there's nothing cached.
+      // data is kept; hasError only surfaces when there's nothing cached. Log in
+      // debug so a programming error (bad parse, null deref) isn't silently
+      // hidden as "hasError".
       _error = true;
+      if (kDebugMode) debugPrint('[home] refresh failed: $e\n$st');
     } finally {
       notifyListeners();
     }
@@ -114,12 +136,15 @@ class HomeController extends ChangeNotifier {
   /// 7-day max; oldest→newest, last bucket = today. All-zero week → flat zeros.
   List<double> get weeklyActivity {
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
+    // UTC midnights from the LOCAL calendar date, so the day delta is exact:
+    // a plain local difference().inDays truncates a 23-hour DST day to 0 and
+    // mis-buckets by one. Dates are already local (Wire.timestamp .toLocal()).
+    final today = DateTime.utc(now.year, now.month, now.day);
     final counts = List<int>.filled(7, 0);
     for (final s in _sessions) {
       final e = s.enteredAt;
       if (e == null) continue;
-      final days = today.difference(DateTime(e.year, e.month, e.day)).inDays;
+      final days = today.difference(DateTime.utc(e.year, e.month, e.day)).inDays;
       if (days >= 0 && days < 7) counts[6 - days]++; // index 6 = today
     }
     final max = counts.fold<int>(0, (m, c) => c > m ? c : m);
@@ -172,14 +197,9 @@ class HomeController extends ChangeNotifier {
   /// never reopens a snooze, so we re-classify it client-side).
   int get openAlertsCount {
     final now = DateTime.now();
-    return _alerts.where((a) {
-      return switch (a.status) {
-        AlertStatus.open || AlertStatus.escalated => true,
-        AlertStatus.snoozed =>
-          a.snoozeUntil != null && a.snoozeUntil!.isBefore(now),
-        _ => false,
-      };
-    }).length;
+    return _alerts
+        .where((a) => alertNeedsAction(a.status, a.snoozeUntil, now))
+        .length;
   }
 
   static bool _sameDay(DateTime a, DateTime b) =>

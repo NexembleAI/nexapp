@@ -390,6 +390,25 @@ class TodayStats {
 /// Status of a lead-coverage alert, mirroring tracking.lead_alert (§4.6).
 enum AlertStatus { open, ack, snoozed, resolved, escalated }
 
+/// [status] with the client-side snooze-expiry derivation applied: the backend
+/// never reopens a snooze, so a snoozed alert whose [snoozeUntil] has passed
+/// reads as open. Single source of truth — used by both [LeadAlert] (domain) and
+/// the Home needs-action count (which works off the wire DTO).
+AlertStatus effectiveAlertStatus(
+        AlertStatus status, DateTime? snoozeUntil, DateTime now) =>
+    status == AlertStatus.snoozed &&
+            snoozeUntil != null &&
+            !snoozeUntil.isAfter(now)
+        ? AlertStatus.open
+        : status;
+
+/// True when the alert still demands a decision (Home badge/count + the Alerts
+/// tab's top section).
+bool alertNeedsAction(AlertStatus status, DateTime? snoozeUntil, DateTime now) {
+  final s = effectiveAlertStatus(status, snoozeUntil, now);
+  return s == AlertStatus.open || s == AlertStatus.escalated;
+}
+
 /// Why the alert fired — lead_alert.reason_code.
 enum AlertReason { noVisitWindow, nextActivityOverdue, leadStale }
 
@@ -471,16 +490,10 @@ class LeadAlert {
   /// only, nothing is written back: once [snoozeUntil] has passed, the alert
   /// is effectively open again.
   AlertStatus get effectiveStatus =>
-      status == AlertStatus.snoozed &&
-              snoozeUntil != null &&
-              !snoozeUntil!.isAfter(DateTime.now())
-          ? AlertStatus.open
-          : status;
+      effectiveAlertStatus(status, snoozeUntil, DateTime.now());
 
   /// True when the alert still demands a decision (top section + badge).
-  bool get needsAction =>
-      effectiveStatus == AlertStatus.open ||
-      effectiveStatus == AlertStatus.escalated;
+  bool get needsAction => alertNeedsAction(status, snoozeUntil, DateTime.now());
 
   /// [history] plus a derived `reopened` entry when the snooze has expired. The
   /// backend records no such event (it never reopens, so ListLeadAlertEvents
