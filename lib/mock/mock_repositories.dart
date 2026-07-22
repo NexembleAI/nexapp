@@ -114,6 +114,12 @@ class MockReportsRepository implements ReportsRepository {
         DateTime(today.year, today.month, today.day, h, m);
     return [
       VisitEntry(
+        customerName: 'Cedar & Co.',
+        enteredAt: at(14, 5),
+        dwell: const Duration(minutes: 12),
+        status: null, // no report filed yet -> "No report yet"
+      ),
+      VisitEntry(
         customerName: 'Meridian Logistics',
         enteredAt: at(11, 20),
         dwell: const Duration(minutes: 24),

@@ -318,13 +318,16 @@ class VisitEntry {
   final String customerName;
   final DateTime enteredAt;
   final Duration dwell;
-  final ReportStatus status;
+
+  /// Status of this visit's report, or null when no report has been filed yet
+  /// (a session with no matching visit_report). The row renders "No report yet".
+  final ReportStatus? status;
 
   const VisitEntry({
     required this.customerName,
     required this.enteredAt,
     required this.dwell,
-    required this.status,
+    this.status,
   });
 }
 

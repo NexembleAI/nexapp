@@ -92,6 +92,7 @@ class _VisitRow extends StatelessWidget {
     final theme = Theme.of(context);
     final time = MaterialLocalizations.of(context)
         .formatTimeOfDay(TimeOfDay.fromDateTime(visit.enteredAt));
+    final status = visit.status; // local promotes the null-check for StatusChip
 
     return Padding(
       padding: const EdgeInsets.all(12),
@@ -123,8 +124,30 @@ class _VisitRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          StatusChip(status: visit.status),
+          status == null ? const _NoReportChip() : StatusChip(status: status),
         ],
+      ),
+    );
+  }
+}
+
+/// Shown in place of a StatusChip on a visit that has no report filed yet.
+class _NoReportChip extends StatelessWidget {
+  const _NoReportChip();
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    final color = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        l.visitNoReport,
+        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600),
       ),
     );
   }

@@ -323,6 +323,10 @@
   "uploadFailedMessage": "This report couldn't be uploaded. You can try again.",
   "retryButton": "Retry",
   "statusArchived": "Archived",
+  "visitNoReport": "No report yet",
+  "@visitNoReport": {
+    "description": "Chip on a Home visit row when the visit has no report filed yet"
+  },
   "comingSoonMessage": "Coming soon",
   "settingsTitle": "Settings",
   "signOutButton": "Sign out",
