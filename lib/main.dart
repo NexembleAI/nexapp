@@ -31,7 +31,9 @@ import 'visit_report_client.dart';
 final messengerKey = GlobalKey<ScaffoldMessengerState>();
 final navigatorKey = GlobalKey<NavigatorState>();
 
-void main() async {
+// Future (not void) so integration tests can await the async boot sequence
+// (Preferences/queue/auth init) before driving the UI.
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   await Preferences.init();

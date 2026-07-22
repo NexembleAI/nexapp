@@ -78,6 +78,23 @@ class AuthService {
     return _refresh();
   }
 
+  /// Test-only: injects a session exactly as a successful [login] would, so
+  /// integration tests can bypass the browser OIDC hop (which lives outside
+  /// the Flutter widget tree and cannot be driven by integration_test). The
+  /// caller supplies real tokens (e.g. minted via a Keycloak password grant),
+  /// so everything downstream — registration, uploads — still runs against
+  /// the real backend with real auth.
+  @visibleForTesting
+  Future<void> seedSession({
+    required String access,
+    required String refresh,
+    String? id,
+    DateTime? expiry,
+  }) async {
+    await _store(access: access, refresh: refresh, id: id, expiry: expiry);
+    authState.value = true;
+  }
+
   /// Forces a token refresh regardless of the cached access token's expiry.
   /// Used by [VisitReportClient] after a server-side 401 — a rejected or
   /// clock-skewed access token that [accessToken] wouldn't otherwise refresh.
