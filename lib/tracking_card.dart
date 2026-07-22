@@ -131,8 +131,10 @@ class _TrackingCardState extends State<TrackingCard>
     };
 
     final window = _hours == null
-        ? '—'
-        : '${ml.formatTimeOfDay(_hours!.start)} – ${ml.formatTimeOfDay(_hours!.end)}';
+        ? '—' // still loading
+        : _hours!.closed
+            ? l.officeHoursClosed
+            : '${ml.formatTimeOfDay(_hours!.start)} – ${ml.formatTimeOfDay(_hours!.end)}';
 
     return Container(
       padding: const EdgeInsets.all(20),

@@ -371,6 +371,10 @@
   "devicePushUnavailable": "Unavailable",
   "officeHoursSectionLabel": "Office hours",
   "officeHoursHelp": "Set by your administrator",
+  "officeHoursClosed": "Closed today",
+  "@officeHoursClosed": {
+    "description": "Office-hours badge/value when today is a configured non-working day"
+  },
   "diagnosticsRow": "Diagnostics & logs",
   "onboardingStepLabel": "Step {current} of {total}",
   "@onboardingStepLabel": {

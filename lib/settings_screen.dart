@@ -254,11 +254,13 @@ class _SettingsScreenState extends State<SettingsScreen>
         ),
       ],
     );
-    String hoursText() => _officeHours == null
-        ? '—'
-        : '${MaterialLocalizations.of(context).formatTimeOfDay(_officeHours!.start)}'
-              ' – '
-              '${MaterialLocalizations.of(context).formatTimeOfDay(_officeHours!.end)}';
+    String hoursText() {
+      final h = _officeHours;
+      if (h == null) return '—'; // still loading
+      if (h.closed) return l.officeHoursClosed;
+      final ml = MaterialLocalizations.of(context);
+      return '${ml.formatTimeOfDay(h.start)} – ${ml.formatTimeOfDay(h.end)}';
+    }
 
     return Scaffold(
       appBar: AppBar(title: Text(l.settingsTitle)),
