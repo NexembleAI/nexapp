@@ -39,7 +39,15 @@ class _TodayVisitsListState extends State<TodayVisitsList> {
   Future<void> _load() async {
     try {
       final visits = await ReportsRepository.instance.todayVisits();
-      if (mounted) setState(() => _visits = visits);
+      // Clear the error on success — otherwise one failed load latches the error
+      // card for the widget's lifetime (kept alive by the IndexedStack), even
+      // after a later successful refresh.
+      if (mounted) {
+        setState(() {
+          _visits = visits;
+          _error = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _error = true);
     }

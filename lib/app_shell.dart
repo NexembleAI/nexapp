@@ -137,8 +137,15 @@ class _AlertsBadgeState extends State<_AlertsBadge> {
   }
 
   Future<void> _refresh() async {
-    final count = await AlertsRepository.instance.openAlertsCount();
-    if (mounted) setState(() => _count = count);
+    try {
+      final count = await AlertsRepository.instance.openAlertsCount();
+      if (mounted) setState(() => _count = count);
+    } catch (_) {
+      // No data yet / load failed (HomeDataException). Keep the last count
+      // rather than blanking the badge — and, since this is a fire-and-forget
+      // listener on changes, swallow so it isn't an unhandled async error on
+      // every refresh notify.
+    }
   }
 
   @override

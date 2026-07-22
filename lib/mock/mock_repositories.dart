@@ -63,17 +63,7 @@ class MockCustomersRepository implements CustomersRepository {
 }
 
 class MockReportsRepository implements ReportsRepository {
-  TodayStats _todayStats = const TodayStats(visits: 4, reports: 3);
-
-  /// Called on enqueue (via UploadQueue.onEnqueued) — a filed report counts
-  /// toward today's Reports even before it uploads.
-  void bumpTodayReports() {
-    _todayStats = TodayStats(
-      visits: _todayStats.visits,
-      reports: _todayStats.reports + 1,
-    );
-    _changes.bump();
-  }
+  final TodayStats _todayStats = const TodayStats(visits: 4, reports: 3);
 
   /// Called by the uploader on success (mock-only): the uploaded report
   /// becomes a server-side `submitted` report in history.

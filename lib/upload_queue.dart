@@ -24,9 +24,6 @@ class UploadQueue {
   final List<QueuedReport> _items = [];
   final _QueueChanges _changes = _QueueChanges();
 
-  /// Fired on enqueue; wired in main.dart to bump the today-Reports stat.
-  void Function(QueuedReport)? onEnqueued;
-
   Listenable get changes => _changes;
   List<QueuedReport> get items => List.unmodifiable(_items);
 
@@ -311,9 +308,8 @@ class UploadQueue {
     // collapses to one row in SQLite, so replace an existing entry in place
     // rather than appending a ghost the DB doesn't have. Callers mint a fresh
     // key per submit, but a double-tap on Submit could re-enqueue the same
-    // draft before the screen pops — this keeps enqueue() idempotent: the
-    // onEnqueued side effect (e.g. bumping the today-reports count) fires only
-    // on a genuine first insert.
+    // draft before the screen pops — replacing in place keeps enqueue()
+    // idempotent, so a today-Reports count derived from the queue isn't doubled.
     final existing = _items.indexWhere(
       (i) => i.idempotencyKey == item.idempotencyKey,
     );
@@ -324,7 +320,6 @@ class UploadQueue {
     }
     _items.insert(0, item);
     _changes.bump();
-    onEnqueued?.call(item);
   }
 
   /// Absolute path for a stored audio filename, rebuilt against the current
