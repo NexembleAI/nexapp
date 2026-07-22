@@ -22,19 +22,26 @@ class DeviceService {
       final list = j['devices'];
       if (list is! List) return OfficeHours.defaultHours;
 
-      Map<String, dynamic>? match;
+      // ListDevices is own-scoped, so every row belongs to this user. Prefer an
+      // exact unique_id match; otherwise fall back to the (single) ACTIVE device
+      // — robust to Preferences.id being momentarily unavailable at startup.
+      Map<String, dynamic>? byId, anyActive, anyDevice;
       for (final d in list) {
         if (d is! Map) continue;
         final dm = d.cast<String, dynamic>();
-        if (myId == null || Wire.string(dm, 'unique_id') != myId) continue;
-        if (Wire.string(dm, 'status') == 'DEVICE_STATUS_ACTIVE') {
-          match = dm; // prefer the active row for this phone
-          break;
+        anyDevice ??= dm;
+        final isActive = Wire.string(dm, 'status') == 'DEVICE_STATUS_ACTIVE';
+        if (isActive) anyActive ??= dm;
+        if (myId != null &&
+            myId.isNotEmpty &&
+            Wire.string(dm, 'unique_id') == myId) {
+          byId = dm;
+          if (isActive) break; // ideal: the active row for this exact phone
         }
-        match ??= dm; // fallback: a non-active row for this phone
       }
-      if (match == null) return OfficeHours.defaultHours;
-      return OfficeHours.tryFromDeviceJson(Wire.string(match, 'office_hours')) ??
+      final match = byId ?? anyActive ?? anyDevice;
+      return OfficeHours.tryFromDeviceJson(
+              match == null ? null : Wire.string(match, 'office_hours')) ??
           OfficeHours.defaultHours;
     } on ApiException {
       return OfficeHours.defaultHours; // neutral badge; don't fail the card load

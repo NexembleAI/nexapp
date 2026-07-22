@@ -48,11 +48,24 @@ class Preferences {
     await _initFuture;
   }
 
+  /// Options shared by the cached instance and any one-off [SharedPreferencesAsync]
+  /// disk read (so they hit the same backend).
+  static SharedPreferencesOptions get _asyncOptions => Platform.isAndroid
+      ? SharedPreferencesAsyncAndroidOptions(
+          backend: SharedPreferencesAndroidBackendLibrary.SharedPreferences)
+      : SharedPreferencesOptions();
+
+  /// Reads [key] straight from disk (its own [SharedPreferencesAsync]), bypassing
+  /// the in-memory cache — for the cross-isolate case where another isolate wrote
+  /// it. Unlike `instance.reloadCache()`, this does NOT clear the shared cache, so
+  /// a concurrent synchronous get is never transiently nulled (that race surfaced
+  /// as [id] reading null at startup).
+  static Future<bool?> diskBool(String key) =>
+      SharedPreferencesAsync(options: _asyncOptions).getBool(key);
+
   static Future<void> _createInstance() async {
     instance = await SharedPreferencesWithCache.create(
-      sharedPreferencesOptions: Platform.isAndroid
-          ? SharedPreferencesAsyncAndroidOptions(backend: SharedPreferencesAndroidBackendLibrary.SharedPreferences)
-          : SharedPreferencesOptions(),
+      sharedPreferencesOptions: _asyncOptions,
       cacheOptions: SharedPreferencesWithCacheOptions(
         allowList: {
           id, url, accuracy, distance, interval, angle, heartbeat, buffer, wakelock, stopDetection, preferPlatformProviders, password, deviceRegistered, urlConfig, trackingStartedAt, trackingIntent, onboardingComplete,
