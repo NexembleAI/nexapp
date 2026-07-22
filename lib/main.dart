@@ -26,6 +26,7 @@ import 'theme.dart';
 import 'tracking_repository.dart';
 import 'upload_queue.dart';
 import 'upload_uploader.dart';
+import 'visit_report_client.dart';
 
 final messengerKey = GlobalKey<ScaffoldMessengerState>();
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -58,14 +59,10 @@ void main() async {
   AlertsRepository.instance = alertsMock;
   TrackingRepository.instance = MockTrackingRepository();
   CustomersRepository.instance = MockCustomersRepository();
-  // Uploader drains the queue while online. The POST and the server-reaction
-  // are injected simulations (deleted with lib/mock/ + replaced by real HTTP).
-  // Connectivity-aware so the simulation fails offline the way a real POST
-  // would (the uploader no longer aborts in-flight work — the outcome decides).
-  UploadUploader.instance.upload = (_) async =>
-      ConnectivityService.instance.isOnline
-          ? UploadOutcome.success
-          : UploadOutcome.retryable;
+  // Uploader drains the queue while online. The POST is now the real
+  // SubmitVisitReport client (multipart to the tracking REST edge); the
+  // server-reaction below stays a mock until #13 wires the real repositories.
+  UploadUploader.instance.upload = VisitReportClient().submit;
   UploadUploader.instance.onUploaded = (item) {
     reportsMock.addSubmitted(item);
     if (item.leadIds.isNotEmpty) alertsMock.resolveForLeads(item.leadIds);
