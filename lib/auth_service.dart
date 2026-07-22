@@ -78,6 +78,12 @@ class AuthService {
     return _refresh();
   }
 
+  /// Forces a token refresh, ignoring the cached expiry — used after a server
+  /// 401 on a token we still consider locally valid. Returns the new access
+  /// token, or null if the refresh token is dead (in which case [logout] has
+  /// already run and [authState] is now false). See [_refresh].
+  Future<String?> forceRefresh() => _refresh();
+
   Future<String?> _refresh() async {
     final refresh = await _storage.read(key: _kRefresh);
     if (refresh == null || refresh.isEmpty) return null;
