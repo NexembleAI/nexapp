@@ -319,6 +319,10 @@ class VisitEntry {
   final DateTime enteredAt;
   final Duration dwell;
 
+  /// True while the visit is still open (the session hasn't exited yet). The row
+  /// shows "Ongoing" instead of a meaningless 0-minute dwell.
+  final bool ongoing;
+
   /// Status of this visit's report, or null when no report has been filed yet
   /// (a session with no matching visit_report). The row renders "No report yet".
   final ReportStatus? status;
@@ -327,6 +331,7 @@ class VisitEntry {
     required this.customerName,
     required this.enteredAt,
     required this.dwell,
+    this.ongoing = false,
     this.status,
   });
 }

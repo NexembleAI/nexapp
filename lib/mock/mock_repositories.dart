@@ -106,7 +106,8 @@ class MockReportsRepository implements ReportsRepository {
       VisitEntry(
         customerName: 'Cedar & Co.',
         enteredAt: at(14, 5),
-        dwell: const Duration(minutes: 12),
+        dwell: Duration.zero,
+        ongoing: true, // still at the customer -> "Ongoing"
         status: null, // no report filed yet -> "No report yet"
       ),
       VisitEntry(

@@ -17,6 +17,8 @@ import 'app_shell.dart';
 import 'customers_repository.dart';
 import 'login_screen.dart';
 import 'mock/mock_repositories.dart'; // TODO(mock): remove with lib/mock/
+import 'crm_name_resolver.dart';
+import 'device_service.dart';
 import 'home_controller.dart';
 import 'nexcore_alerts_repository.dart';
 import 'nexcore_reports_repository.dart';
@@ -81,6 +83,12 @@ void main() async {
   AuthService.instance.authState.addListener(() {
     if (AuthService.instance.authState.value == true) {
       UploadUploader.instance.resume();
+    } else {
+      // Sign-out: drop the previous session's cached data so the next account
+      // (possibly a different user on a shared device) never sees it.
+      HomeController.instance.reset();
+      DeviceService.clearCache();
+      CrmNameResolver.instance.clear();
     }
   });
   runApp(const MainApp());

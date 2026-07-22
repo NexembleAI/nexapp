@@ -60,7 +60,18 @@ class _TrackingCardState extends State<TrackingCard>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Resume catches permission changes made in OS settings (which change no
     // state here, so [GeolocationService.revision] wouldn't fire).
-    if (state == AppLifecycleState.resumed) _refreshStatus();
+    if (state == AppLifecycleState.resumed) {
+      _refreshStatus();
+      _reloadOfficeHours(); // a day boundary while backgrounded changes "today"
+    }
+  }
+
+  /// Re-derive today's office-hours window (cheap: no network, the schedule is
+  /// cached). Needed because the card loads once but the app can resume the
+  /// next day — the window is per-day.
+  Future<void> _reloadOfficeHours() async {
+    final hours = await TrackingRepository.instance.officeHours();
+    if (mounted) setState(() => _hours = hours);
   }
 
   /// Read-only: reflects tracking state, never changes it. Auto-resume is

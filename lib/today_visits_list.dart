@@ -134,7 +134,7 @@ class _VisitRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$time · ${l.dwellMinutes(visit.dwell.inMinutes)}',
+                  '$time · ${visit.ongoing ? l.visitOngoing : l.dwellMinutes(visit.dwell.inMinutes)}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),

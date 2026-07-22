@@ -23,8 +23,17 @@ class UploadQueue {
   String? _audioDir;
   final List<QueuedReport> _items = [];
   final _QueueChanges _changes = _QueueChanges();
+  final _QueueChanges _progressChanges = _QueueChanges();
 
+  /// Fires on membership/status transitions (enqueue, mark*, retry) — NOT on
+  /// upload-progress ticks. Home + the Reports tab listen here so a ~5/second
+  /// progress stream doesn't fan out to widgets that don't show a progress bar.
   Listenable get changes => _changes;
+
+  /// Fires on upload-progress ticks only ([setProgress]). Just the confirmation
+  /// screen's live-queue bars listen here.
+  Listenable get progressChanges => _progressChanges;
+
   List<QueuedReport> get items => List.unmodifiable(_items);
 
   /// Oldest queued item that is *due* (FIFO), or null. Items backing off after
@@ -76,10 +85,12 @@ class UploadQueue {
     _changes.bump();
   }
 
-  /// In-memory only (progress isn't persisted).
+  /// In-memory only (progress isn't persisted). Bumps [progressChanges], not
+  /// [changes] — a progress tick isn't a membership/status change, so Home and
+  /// the Reports list must not re-derive on every ~200ms tick.
   void setProgress(String id, double p) {
     _updateCache(id, (i) => i.copyWith(progress: p));
-    _changes.bump();
+    _progressChanges.bump();
   }
 
   Future<void> markQueued(String id) async {

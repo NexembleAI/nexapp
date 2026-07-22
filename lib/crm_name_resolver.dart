@@ -39,6 +39,16 @@ class CrmNameResolver {
   Future<Map<String, String>> customerNames(Iterable<String> ids) async =>
       (await resolve(customerIds: ids)).customers;
 
+  /// Drops all cached names on sign-out. Names are tenant-scoped (correct across
+  /// users of the same tenant), so this is defensive — a no-cost reset that also
+  /// covers a future multi-tenant sign-in. An in-flight fetch is harmless (same
+  /// tenant → same names), so no generation guard is needed.
+  void clear() {
+    _customers.clear();
+    _leads.clear();
+    _mutedUntil = null;
+  }
+
   /// Resolve any mix of customer and lead ids. Cached hits return immediately;
   /// misses are fetched (batched, deduped) unless we're in the post-Unavailable
   /// cooldown. Unresolvable ids are just omitted from the result.

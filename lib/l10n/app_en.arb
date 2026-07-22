@@ -327,6 +327,10 @@
   "@unnamedCustomer": {
     "description": "Fallback name when a customer can't be resolved (CRM resolver off or unknown id)"
   },
+  "visitOngoing": "Ongoing",
+  "@visitOngoing": {
+    "description": "Shown in place of a dwell time on a Home visit row while the visit is still in progress (session not yet exited)"
+  },
   "visitNoReport": "No report yet",
   "@visitNoReport": {
     "description": "Chip on a Home visit row when the visit has no report filed yet"

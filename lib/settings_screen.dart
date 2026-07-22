@@ -67,7 +67,19 @@ class _SettingsScreenState extends State<SettingsScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Re-check after the user returns from OS settings / a system dialog.
-    if (state == AppLifecycleState.resumed) _loadPermissions();
+    if (state == AppLifecycleState.resumed) {
+      _loadPermissions();
+      _reloadOfficeHours(); // a day boundary changes today's window (per-day)
+    }
+  }
+
+  /// Re-derive today's office-hours window (cheap: the schedule is cached, no
+  /// network) — the app can resume the next day and the window is per-day.
+  Future<void> _reloadOfficeHours() async {
+    try {
+      final h = await TrackingRepository.instance.officeHours();
+      if (mounted) setState(() => _officeHours = h);
+    } catch (_) {}
   }
 
   Future<void> _loadUser() async {

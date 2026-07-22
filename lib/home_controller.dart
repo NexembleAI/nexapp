@@ -35,6 +35,25 @@ class HomeController extends ChangeNotifier {
   DateTime? _lastAttemptAt;
   Future<void>? _inflight;
   bool _error = false;
+  int _generation = 0; // bumped by reset(); an in-flight load with a stale
+  // generation discards its result instead of repopulating.
+
+  /// Drops the previous session's cached data on sign-out, so the next user (a
+  /// different account on a shared device) never sees it. Bumping [_generation]
+  /// makes any in-flight [_run] discard its result. No notifyListeners: the auth
+  /// gate disposes the Home subtree, and the next sign-in mounts fresh widgets
+  /// that fetch (hasData is false again).
+  void reset() {
+    _generation++;
+    _sessions = const [];
+    _reports = const [];
+    _alerts = const [];
+    _names = const {};
+    _loadedAt = null;
+    _lastAttemptAt = null;
+    _inflight = null;
+    _error = false;
+  }
 
   bool get hasData => _loadedAt != null;
 
@@ -79,6 +98,7 @@ class HomeController extends ChangeNotifier {
       _inflight ??= _run().whenComplete(() => _inflight = null);
 
   Future<void> _run() async {
+    final gen = _generation;
     _lastAttemptAt = DateTime.now();
     try {
       final res = await Future.wait([
@@ -99,6 +119,7 @@ class HomeController extends ChangeNotifier {
       };
       final names = await CrmNameResolver.instance.customerNames(custIds);
 
+      if (gen != _generation) return; // reset() (sign-out) mid-load — discard
       _sessions = sessions;
       _reports = reports;
       _alerts = alerts;
@@ -106,6 +127,7 @@ class HomeController extends ChangeNotifier {
       _loadedAt = DateTime.now();
       _error = false;
     } catch (e, st) {
+      if (gen != _generation) return; // discard a stale failure too
       // Fail-together: one failed list blanks the refresh rather than showing an
       // inconsistent snapshot (e.g. sessions with their reports missing). Prior
       // data is kept; hasError only surfaces when there's nothing cached. Log in
@@ -188,6 +210,7 @@ class HomeController extends ChangeNotifier {
           customerName: _names[s.customerId] ?? '',
           enteredAt: s.enteredAt!,
           dwell: s.dwell,
+          ongoing: s.isOpen, // exited_at unset → still at the customer
           status: bySession[s.id]?.status,
         ),
     ];
