@@ -64,11 +64,24 @@ class HttpMultipartVisitReportTransport implements VisitReportTransport {
     void Function(int sent, int total)? onProgress,
   }) async {
     final client = await _httpClient();
+    // .timeout() below abandons _send without cancelling it — the orphaned
+    // stream can keep firing progress until client.close() destroys the socket.
+    // Gate onProgress so no tick escapes once send() has unwound; otherwise a
+    // stale tick could land on an item the uploader has already re-queued (and
+    // pollute its per-attempt progress bookkeeping). The finally runs
+    // synchronously with the timeout throw, before the orphan's next bump.
+    var live = true;
+    final gated = onProgress == null
+        ? null
+        : (int sent, int total) {
+            if (live) onProgress(sent, total);
+          };
     try {
       return await _send(
-        client, uri, token, metadata, audioFilePath, audioMime, onProgress,
+        client, uri, token, metadata, audioFilePath, audioMime, gated,
       ).timeout(_totalTimeout);
     } finally {
+      live = false;
       client.close(force: true);
     }
   }
@@ -255,7 +268,11 @@ class VisitReportClient {
       return UploadOutcome.unauthenticated;
     }
 
-    final second = await _attempt(item, refreshed, onProgress);
+    // No progress for the refresh-retry: attempt 1 already streamed the whole
+    // body to 100% (a 401 only arrives after request.close), so re-streaming
+    // from 0 would snap the bar back down. null → no setProgress fires, the item
+    // holds at 100% and the bar stays indeterminate ("submitting…") for the retry.
+    final second = await _attempt(item, refreshed, null);
     if (second == UploadOutcome.unauthenticated) {
       // Still 401 with a fresh token: the session itself is dead. Nothing else
       // writes authState=false on a server-side rejection, so flip it here — the
@@ -283,8 +300,12 @@ class VisitReportClient {
         metadata: metadata,
         audioFilePath: audioPath,
         audioMime: item.audioMime,
-        onProgress: (sent, total) =>
-            onProgress?.call(total == 0 ? 0 : sent / total),
+        // Clamp the fraction to [0,1]: if the audio file grew on disk after its
+        // length was measured, `sent` can briefly exceed `total` before dart:io
+        // errors on the over-Content-Length write. Keeps the onProgress contract
+        // sane for any caller (the uploader clamps too, but this owns the ratio).
+        onProgress: (sent, total) => onProgress
+            ?.call(total == 0 ? 0 : (sent / total).clamp(0.0, 1.0).toDouble()),
       );
       final outcome = _classify(status, body);
       reportDebugLog('HTTP $status -> ${outcome.name}');
