@@ -23,6 +23,7 @@ import 'home_controller.dart';
 import 'nexcore_alerts_repository.dart';
 import 'nexcore_reports_repository.dart';
 import 'nexcore_tracking_repository.dart';
+import 'nexcore_visit_reports.dart';
 import 'nexemble_reveal.dart';
 import 'onboarding_screen.dart';
 import 'preferences.dart';
@@ -57,23 +58,26 @@ Future<void> main() async {
   await AuthService.instance.restore();
   // Data-source wiring: each line flips to a real implementation as its
   // backend lands; lib/mock/ is deleted with the last one.
-  // Home is backend-backed via HomeController; the Reports/Alerts TABS still
-  // read the mocks until those tabs are wired, so the real repos wrap the mock
-  // and delegate their tab methods to it.
-  final reportsMock = MockReportsRepository();
+  // Home is backend-backed via HomeController; the Reports TAB is now the real
+  // Nexcore-backed tab (#13), while the Alerts TAB still reads the mock until
+  // it's wired — so the real repos wrap their tab and delegate to it.
+  final visitReportsTab = NexcoreVisitReportsTab();
   final alertsMock = MockAlertsRepository();
-  ReportsRepository.instance = NexcoreReportsRepository(reportsMock);
+  ReportsRepository.instance = NexcoreReportsRepository(visitReportsTab);
   AlertsRepository.instance = NexcoreAlertsRepository(alertsMock);
   TrackingRepository.instance = NexcoreTrackingRepository();
   CustomersRepository.instance = MockCustomersRepository();
-  // Uploader drains the queue while online. The POST is now the real
-  // SubmitVisitReport client (multipart to the tracking REST edge); the
-  // server-reaction below stays a mock until #13 wires the real repositories.
+  // Uploader drains the queue while online. The POST is the real
+  // SubmitVisitReport client (multipart to the tracking REST edge); the report
+  // server-reaction below is now the real Reports tab (#13), while the alert
+  // auto-resolve stays a mock until the Alerts tab is wired.
   UploadUploader.instance.upload = VisitReportClient().submit;
   UploadUploader.instance.onUploaded = (item) {
-    // Keep the (mock) Reports/Alerts tabs consistent, and refresh real Home so
-    // the new report + any auto-resolved alert show once the POST lands.
-    reportsMock.addSubmitted(item);
+    // Overlay the just-uploaded report on the real Reports tab (until a list
+    // refetch sees the server row), keep the (mock) Alerts tab consistent, and
+    // refresh real Home so the new report + any auto-resolved alert show once
+    // the POST lands.
+    visitReportsTab.reportUploaded(item);
     if (item.leadIds.isNotEmpty) alertsMock.resolveForLeads(item.leadIds);
     HomeController.instance.refresh();
   };

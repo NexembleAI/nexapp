@@ -59,6 +59,12 @@ class NexcoreReportsRepository implements ReportsRepository {
   Future<ReportDetail> reportDetail(String id) => _tabs.reportDetail(id);
 
   @override
+  Future<ReportStatusUpdate> reportStatus(String id) => _tabs.reportStatus(id);
+
+  @override
+  Future<String?> reportAudio(String id) => _tabs.reportAudio(id);
+
+  @override
   Future<void> updateReport(
     String id, {
     required String notes,
