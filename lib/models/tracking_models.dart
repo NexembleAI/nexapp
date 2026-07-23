@@ -318,13 +318,21 @@ class VisitEntry {
   final String customerName;
   final DateTime enteredAt;
   final Duration dwell;
-  final ReportStatus status;
+
+  /// True while the visit is still open (the session hasn't exited yet). The row
+  /// shows "Ongoing" instead of a meaningless 0-minute dwell.
+  final bool ongoing;
+
+  /// Status of this visit's report, or null when no report has been filed yet
+  /// (a session with no matching visit_report). The row renders "No report yet".
+  final ReportStatus? status;
 
   const VisitEntry({
     required this.customerName,
     required this.enteredAt,
     required this.dwell,
-    required this.status,
+    this.ongoing = false,
+    this.status,
   });
 }
 
@@ -386,6 +394,25 @@ class TodayStats {
 
 /// Status of a lead-coverage alert, mirroring tracking.lead_alert (§4.6).
 enum AlertStatus { open, ack, snoozed, resolved, escalated }
+
+/// [status] with the client-side snooze-expiry derivation applied: the backend
+/// never reopens a snooze, so a snoozed alert whose [snoozeUntil] has passed
+/// reads as open. Single source of truth — used by both [LeadAlert] (domain) and
+/// the Home needs-action count (which works off the wire DTO).
+AlertStatus effectiveAlertStatus(
+        AlertStatus status, DateTime? snoozeUntil, DateTime now) =>
+    status == AlertStatus.snoozed &&
+            snoozeUntil != null &&
+            !snoozeUntil.isAfter(now)
+        ? AlertStatus.open
+        : status;
+
+/// True when the alert still demands a decision (Home badge/count + the Alerts
+/// tab's top section).
+bool alertNeedsAction(AlertStatus status, DateTime? snoozeUntil, DateTime now) {
+  final s = effectiveAlertStatus(status, snoozeUntil, now);
+  return s == AlertStatus.open || s == AlertStatus.escalated;
+}
 
 /// Why the alert fired — lead_alert.reason_code.
 enum AlertReason { noVisitWindow, nextActivityOverdue, leadStale }
@@ -468,16 +495,10 @@ class LeadAlert {
   /// only, nothing is written back: once [snoozeUntil] has passed, the alert
   /// is effectively open again.
   AlertStatus get effectiveStatus =>
-      status == AlertStatus.snoozed &&
-              snoozeUntil != null &&
-              !snoozeUntil!.isAfter(DateTime.now())
-          ? AlertStatus.open
-          : status;
+      effectiveAlertStatus(status, snoozeUntil, DateTime.now());
 
   /// True when the alert still demands a decision (top section + badge).
-  bool get needsAction =>
-      effectiveStatus == AlertStatus.open ||
-      effectiveStatus == AlertStatus.escalated;
+  bool get needsAction => alertNeedsAction(status, snoozeUntil, DateTime.now());
 
   /// [history] plus a derived `reopened` entry when the snooze has expired. The
   /// backend records no such event (it never reopens, so ListLeadAlertEvents
@@ -522,5 +543,80 @@ class OfficeHours {
   final TimeOfDay start;
   final TimeOfDay end;
 
-  const OfficeHours({required this.start, required this.end});
+  /// True when today is a configured non-working day (empty or unlisted in the
+  /// schedule); [start]/[end] are unused then and the badge shows "Closed today".
+  final bool closed;
+
+  const OfficeHours({required this.start, required this.end}) : closed = false;
+
+  const OfficeHours._closed()
+      : start = const TimeOfDay(hour: 0, minute: 0),
+        end = const TimeOfDay(hour: 0, minute: 0),
+        closed = true;
+
+  /// Used when the device has no schedule at all — assume a standard day.
+  static const OfficeHours defaultHours = OfficeHours(
+    start: TimeOfDay(hour: 9, minute: 0),
+    end: TimeOfDay(hour: 17, minute: 30),
+  );
+
+  /// Today is a configured non-working day.
+  static const OfficeHours closedToday = OfficeHours._closed();
+
+  /// Parses a tracking.device.office_hours JSON string
+  /// (`{"tz":..., "weekly_schedule":{"mon":[["09:00","18:00"]], ...}}`) into
+  /// TODAY's window. Timezone is ignored — the "HH:MM" values are shown as
+  /// device-local wall-clock (the tz governs the backend's gating, not this
+  /// display). Three outcomes:
+  ///   • null            — no schedule at all (absent / unparseable / `{}`); the
+  ///                       caller substitutes [defaultHours].
+  ///   • [closedToday]   — a schedule exists but today is empty or unlisted
+  ///                       (authoritative: missing day == closed, like the gate).
+  ///   • a window        — today's earliest start … latest end (collapses a
+  ///                       multi-window day, e.g. a lunch split).
+  static OfficeHours? tryFromDeviceJson(String? json, {DateTime? now}) {
+    if (json == null) return null;
+    final s = json.trim();
+    if (s.isEmpty || s == '{}' || s == 'null') return null;
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(s);
+    } catch (_) {
+      return null;
+    }
+    if (decoded is! Map) return null;
+    final sched = decoded['weekly_schedule'];
+    if (sched is! Map || sched.isEmpty) return null; // no schedule → default
+
+    // Schedule IS configured → authoritative. Today's key decides. [now] is
+    // injectable for tests; production reads the wall clock.
+    const keys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    final windows = sched[keys[(now ?? DateTime.now()).weekday - 1]]; // Mon=1
+    if (windows is! List || windows.isEmpty) return closedToday; // empty/unlisted
+
+    int? minStart, maxEnd; // minutes since midnight
+    for (final w in windows) {
+      if (w is! List || w.length != 2) continue;
+      final start = _hhmm(w[0]);
+      final end = _hhmm(w[1]);
+      if (start == null || end == null) continue;
+      if (minStart == null || start < minStart) minStart = start;
+      if (maxEnd == null || end > maxEnd) maxEnd = end;
+    }
+    if (minStart == null || maxEnd == null) return closedToday; // no valid window
+    return OfficeHours(
+      start: TimeOfDay(hour: minStart ~/ 60, minute: minStart % 60),
+      end: TimeOfDay(hour: maxEnd ~/ 60, minute: maxEnd % 60),
+    );
+  }
+
+  static int? _hhmm(Object? v) {
+    if (v is! String) return null;
+    final parts = v.split(':');
+    if (parts.length != 2) return null;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null || h < 0 || h > 23 || m < 0 || m > 59) return null;
+    return h * 60 + m;
+  }
 }

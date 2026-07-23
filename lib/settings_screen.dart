@@ -67,7 +67,19 @@ class _SettingsScreenState extends State<SettingsScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Re-check after the user returns from OS settings / a system dialog.
-    if (state == AppLifecycleState.resumed) _loadPermissions();
+    if (state == AppLifecycleState.resumed) {
+      _loadPermissions();
+      _reloadOfficeHours(); // a day boundary changes today's window (per-day)
+    }
+  }
+
+  /// Re-derive today's office-hours window (cheap: the schedule is cached, no
+  /// network) — the app can resume the next day and the window is per-day.
+  Future<void> _reloadOfficeHours() async {
+    try {
+      final h = await TrackingRepository.instance.officeHours();
+      if (mounted) setState(() => _officeHours = h);
+    } catch (_) {}
   }
 
   Future<void> _loadUser() async {
@@ -254,11 +266,13 @@ class _SettingsScreenState extends State<SettingsScreen>
         ),
       ],
     );
-    String hoursText() => _officeHours == null
-        ? '—'
-        : '${MaterialLocalizations.of(context).formatTimeOfDay(_officeHours!.start)}'
-              ' – '
-              '${MaterialLocalizations.of(context).formatTimeOfDay(_officeHours!.end)}';
+    String hoursText() {
+      final h = _officeHours;
+      if (h == null) return '—'; // still loading
+      if (h.closed) return l.officeHoursClosed;
+      final ml = MaterialLocalizations.of(context);
+      return '${ml.formatTimeOfDay(h.start)} – ${ml.formatTimeOfDay(h.end)}';
+    }
 
     return Scaffold(
       appBar: AppBar(title: Text(l.settingsTitle)),

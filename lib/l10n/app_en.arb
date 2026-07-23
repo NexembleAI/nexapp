@@ -323,6 +323,18 @@
   "uploadFailedMessage": "This report couldn't be uploaded. You can try again.",
   "retryButton": "Retry",
   "statusArchived": "Archived",
+  "unnamedCustomer": "Unnamed customer",
+  "@unnamedCustomer": {
+    "description": "Fallback name when a customer can't be resolved (CRM resolver off or unknown id)"
+  },
+  "visitOngoing": "Ongoing",
+  "@visitOngoing": {
+    "description": "Shown in place of a dwell time on a Home visit row while the visit is still in progress (session not yet exited)"
+  },
+  "visitNoReport": "No report yet",
+  "@visitNoReport": {
+    "description": "Chip on a Home visit row when the visit has no report filed yet"
+  },
   "comingSoonMessage": "Coming soon",
   "settingsTitle": "Settings",
   "signOutButton": "Sign out",
@@ -367,6 +379,10 @@
   "devicePushUnavailable": "Unavailable",
   "officeHoursSectionLabel": "Office hours",
   "officeHoursHelp": "Set by your administrator",
+  "officeHoursClosed": "Closed today",
+  "@officeHoursClosed": {
+    "description": "Office-hours badge/value when today is a configured non-working day"
+  },
   "diagnosticsRow": "Diagnostics & logs",
   "onboardingStepLabel": "Step {current} of {total}",
   "@onboardingStepLabel": {

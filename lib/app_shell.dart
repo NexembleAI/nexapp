@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'alerts_repository.dart';
 import 'alerts_screen.dart';
 import 'geolocation_service.dart';
+import 'home_controller.dart';
 import 'home_screen.dart';
 import 'l10n/app_localizations.dart';
 import 'reports_screen.dart';
@@ -45,13 +46,21 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     // Returning from OS settings is when permission changes — reconcile the
     // actual tracking state against the persisted intent. Startup + resume are
     // the only auto-resume triggers; the Home card merely reflects status.
-    if (state == AppLifecycleState.resumed) GeolocationService.reconcile();
+    if (state == AppLifecycleState.resumed) {
+      GeolocationService.reconcile();
+      HomeController.instance.refreshIfStale(); // freshen Home data + alert badge
+    }
+  }
+
+  void _selectTab(int i) {
+    setState(() => _index = i);
+    if (i == 0) HomeController.instance.refreshIfStale(); // returning to Home
   }
 
   void _onTabRequest() {
     final i = shellTabRequest.value;
     if (i != null && mounted) {
-      setState(() => _index = i);
+      _selectTab(i);
       shellTabRequest.value = null;
     }
   }
@@ -71,7 +80,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        onDestinationSelected: _selectTab,
         destinations: [
           NavigationDestination(
             icon: const Icon(Icons.home_outlined),
@@ -128,8 +137,15 @@ class _AlertsBadgeState extends State<_AlertsBadge> {
   }
 
   Future<void> _refresh() async {
-    final count = await AlertsRepository.instance.openAlertsCount();
-    if (mounted) setState(() => _count = count);
+    try {
+      final count = await AlertsRepository.instance.openAlertsCount();
+      if (mounted) setState(() => _count = count);
+    } catch (_) {
+      // No data yet / load failed (HomeDataException). Keep the last count
+      // rather than blanking the badge — and, since this is a fire-and-forget
+      // listener on changes, swallow so it isn't an unhandled async error on
+      // every refresh notify.
+    }
   }
 
   @override

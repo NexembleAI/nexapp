@@ -33,19 +33,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
   void initState() {
     super.initState();
     _load();
+    // ReportsRepository.changes already merges UploadQueue.changes (membership),
+    // so a single listener covers both the server reports and the local queue
+    // rows — no separate UploadQueue listener (that double-fired on every queue
+    // change). Progress ticks live on UploadQueue.progressChanges now, and the
+    // Reports tab shows no progress bar, so it doesn't listen there.
     ReportsRepository.instance.changes.addListener(_load);
-    UploadQueue.instance.changes.addListener(_onQueueChanged);
   }
 
   @override
   void dispose() {
     ReportsRepository.instance.changes.removeListener(_load);
-    UploadQueue.instance.changes.removeListener(_onQueueChanged);
     super.dispose();
-  }
-
-  void _onQueueChanged() {
-    if (mounted) setState(() {}); // re-read UploadQueue.items
   }
 
   Future<void> _load() async {

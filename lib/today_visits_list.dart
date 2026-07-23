@@ -26,12 +26,28 @@ class _TodayVisitsListState extends State<TodayVisitsList> {
   void initState() {
     super.initState();
     _load();
+    // Re-read on a Home refresh (pull / focus / resume / upload).
+    ReportsRepository.instance.changes.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    ReportsRepository.instance.changes.removeListener(_load);
+    super.dispose();
   }
 
   Future<void> _load() async {
     try {
       final visits = await ReportsRepository.instance.todayVisits();
-      if (mounted) setState(() => _visits = visits);
+      // Clear the error on success — otherwise one failed load latches the error
+      // card for the widget's lifetime (kept alive by the IndexedStack), even
+      // after a later successful refresh.
+      if (mounted) {
+        setState(() {
+          _visits = visits;
+          _error = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _error = true);
     }
@@ -92,13 +108,17 @@ class _VisitRow extends StatelessWidget {
     final theme = Theme.of(context);
     final time = MaterialLocalizations.of(context)
         .formatTimeOfDay(TimeOfDay.fromDateTime(visit.enteredAt));
+    final status = visit.status; // local promotes the null-check for StatusChip
+    final name = visit.customerName.isEmpty
+        ? l.unnamedCustomer // CRM resolver off / unknown id
+        : visit.customerName;
 
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Row(
         children: [
           EntityAvatar(
-            name: visit.customerName,
+            name: name,
             color: theme.colorScheme.primary,
           ),
           const SizedBox(width: 12),
@@ -107,14 +127,14 @@ class _VisitRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  visit.customerName,
+                  name,
                   style: theme.textTheme.bodyLarge?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$time · ${l.dwellMinutes(visit.dwell.inMinutes)}',
+                  '$time · ${visit.ongoing ? l.visitOngoing : l.dwellMinutes(visit.dwell.inMinutes)}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -123,8 +143,30 @@ class _VisitRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          StatusChip(status: visit.status),
+          status == null ? const _NoReportChip() : StatusChip(status: status),
         ],
+      ),
+    );
+  }
+}
+
+/// Shown in place of a StatusChip on a visit that has no report filed yet.
+class _NoReportChip extends StatelessWidget {
+  const _NoReportChip();
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    final color = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        l.visitNoReport,
+        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600),
       ),
     );
   }

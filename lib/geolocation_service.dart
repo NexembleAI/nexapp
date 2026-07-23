@@ -102,11 +102,15 @@ class GeolocationService {
     try {
       // Our cache is a per-isolate snapshot. The FCM background isolate writes
       // intent (a positionStop/positionPeriodic push) straight to disk without
-      // touching this copy, so re-read from disk before trusting it — otherwise
-      // a server-pushed Stop arriving while we're backgrounded-but-alive looks
-      // like it never happened and we'd revert it on the next resume.
-      await Preferences.instance.reloadCache();
-      if (!intent) return;
+      // touching this copy, so read intent fresh FROM DISK before trusting it —
+      // otherwise a server-pushed Stop arriving while we're backgrounded-but-
+      // alive looks like it never happened and we'd revert it on the next
+      // resume. A whole-cache reloadCache() would work but transiently EMPTIES
+      // the shared cache (clear-then-async-repopulate), racing concurrent
+      // synchronous reads (Preferences.id read null at startup → office hours
+      // defaulted); a targeted disk read avoids that.
+      final wanted = await Preferences.diskBool(Preferences.trackingIntent);
+      if (wanted != true) return;
       if (Preferences.instance.getBool(Preferences.deviceRegistered) != true) {
         return;
       }

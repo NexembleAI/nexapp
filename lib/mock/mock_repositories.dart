@@ -63,17 +63,7 @@ class MockCustomersRepository implements CustomersRepository {
 }
 
 class MockReportsRepository implements ReportsRepository {
-  TodayStats _todayStats = const TodayStats(visits: 4, reports: 3);
-
-  /// Called on enqueue (via UploadQueue.onEnqueued) — a filed report counts
-  /// toward today's Reports even before it uploads.
-  void bumpTodayReports() {
-    _todayStats = TodayStats(
-      visits: _todayStats.visits,
-      reports: _todayStats.reports + 1,
-    );
-    _changes.bump();
-  }
+  final TodayStats _todayStats = const TodayStats(visits: 4, reports: 3);
 
   /// Called by the uploader on success (mock-only): the uploaded report
   /// becomes a server-side `submitted` report in history.
@@ -113,6 +103,13 @@ class MockReportsRepository implements ReportsRepository {
     DateTime at(int h, int m) =>
         DateTime(today.year, today.month, today.day, h, m);
     return [
+      VisitEntry(
+        customerName: 'Cedar & Co.',
+        enteredAt: at(14, 5),
+        dwell: Duration.zero,
+        ongoing: true, // still at the customer -> "Ongoing"
+        status: null, // no report filed yet -> "No report yet"
+      ),
       VisitEntry(
         customerName: 'Meridian Logistics',
         enteredAt: at(11, 20),
@@ -486,8 +483,9 @@ class MockTrackingRepository implements TrackingRepository {
   }
 
   @override
-  Future<List<double>> todayActivity() async {
+  Future<List<double>> weeklyActivity() async {
     await Future.delayed(_latency);
-    return const [0.3, 0.5, 0.4, 0.7, 0.6, 0.9, 0.5, 0.8, 0.6, 0.4, 0.3, 0.2];
+    // Visits-per-day over the last 7 days (oldest first; last = today).
+    return const [0.4, 0.7, 0.5, 0.9, 0.6, 0.8, 0.3];
   }
 }

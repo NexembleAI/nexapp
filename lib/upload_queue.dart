@@ -23,11 +23,17 @@ class UploadQueue {
   String? _audioDir;
   final List<QueuedReport> _items = [];
   final _QueueChanges _changes = _QueueChanges();
+  final _QueueChanges _progressChanges = _QueueChanges();
 
-  /// Fired on enqueue; wired in main.dart to bump the today-Reports stat.
-  void Function(QueuedReport)? onEnqueued;
-
+  /// Fires on membership/status transitions (enqueue, mark*, retry) — NOT on
+  /// upload-progress ticks. Home + the Reports tab listen here so a ~5/second
+  /// progress stream doesn't fan out to widgets that don't show a progress bar.
   Listenable get changes => _changes;
+
+  /// Fires on upload-progress ticks only ([setProgress]). Just the confirmation
+  /// screen's live-queue bars listen here.
+  Listenable get progressChanges => _progressChanges;
+
   List<QueuedReport> get items => List.unmodifiable(_items);
 
   /// Oldest queued item that is *due* (FIFO), or null. Items backing off after
@@ -79,10 +85,12 @@ class UploadQueue {
     _changes.bump();
   }
 
-  /// In-memory only (progress isn't persisted).
+  /// In-memory only (progress isn't persisted). Bumps [progressChanges], not
+  /// [changes] — a progress tick isn't a membership/status change, so Home and
+  /// the Reports list must not re-derive on every ~200ms tick.
   void setProgress(String id, double p) {
     _updateCache(id, (i) => i.copyWith(progress: p));
-    _changes.bump();
+    _progressChanges.bump();
   }
 
   Future<void> markQueued(String id) async {
@@ -311,9 +319,8 @@ class UploadQueue {
     // collapses to one row in SQLite, so replace an existing entry in place
     // rather than appending a ghost the DB doesn't have. Callers mint a fresh
     // key per submit, but a double-tap on Submit could re-enqueue the same
-    // draft before the screen pops — this keeps enqueue() idempotent: the
-    // onEnqueued side effect (e.g. bumping the today-reports count) fires only
-    // on a genuine first insert.
+    // draft before the screen pops — replacing in place keeps enqueue()
+    // idempotent, so a today-Reports count derived from the queue isn't doubled.
     final existing = _items.indexWhere(
       (i) => i.idempotencyKey == item.idempotencyKey,
     );
@@ -324,7 +331,6 @@ class UploadQueue {
     }
     _items.insert(0, item);
     _changes.bump();
-    onEnqueued?.call(item);
   }
 
   /// Absolute path for a stored audio filename, rebuilt against the current

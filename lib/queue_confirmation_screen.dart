@@ -157,9 +157,13 @@ class QueueConfirmationScreen extends StatelessWidget {
                     },
                   ),
                   const SizedBox(height: 28),
-                  // Live queue.
+                  // Live queue — merge progressChanges so the per-row bars
+                  // animate (progress ticks no longer bump `changes`).
                   ListenableBuilder(
-                    listenable: UploadQueue.instance.changes,
+                    listenable: Listenable.merge([
+                      UploadQueue.instance.changes,
+                      UploadQueue.instance.progressChanges,
+                    ]),
                     builder: (context, _) {
                       final items = UploadQueue.instance.items;
                       return Column(

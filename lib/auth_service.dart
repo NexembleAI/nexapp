@@ -95,11 +95,12 @@ class AuthService {
     authState.value = true;
   }
 
-  /// Forces a token refresh regardless of the cached access token's expiry.
-  /// Used by [VisitReportClient] after a server-side 401 — a rejected or
-  /// clock-skewed access token that [accessToken] wouldn't otherwise refresh.
-  /// Returns the new access token, or null if the refresh token is gone/rejected
-  /// (in which case [logout] has already run and flipped [authState] to false).
+  /// Forces a token refresh regardless of the cached access token's expiry —
+  /// used after a server-side 401 on a token [accessToken] wouldn't otherwise
+  /// refresh (a rejected or clock-skewed token). Callers: [VisitReportClient]
+  /// (the upload POST) and [TrackingApiClient] (the read GETs). Returns the new
+  /// access token, or null if the refresh token is gone/rejected (in which case
+  /// [logout] has already run and flipped [authState] to false).
   Future<String?> refreshToken() => _refresh();
 
   /// Marks the current session as rejected by the server: flips [authState] to

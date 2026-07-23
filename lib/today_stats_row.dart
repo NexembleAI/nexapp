@@ -44,7 +44,15 @@ class _TodayStatsRowState extends State<TodayStatsRow> {
   Future<void> _loadStats() async {
     try {
       final stats = await ReportsRepository.instance.todayStats();
-      if (mounted) setState(() => _stats = stats);
+      // Clear the error on success, or a single failed load latches '–' for the
+      // widget's lifetime (kept alive by the IndexedStack) despite a later
+      // successful refresh.
+      if (mounted) {
+        setState(() {
+          _stats = stats;
+          _statsError = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _statsError = true);
     }
@@ -53,7 +61,12 @@ class _TodayStatsRowState extends State<TodayStatsRow> {
   Future<void> _loadAlerts() async {
     try {
       final alerts = await AlertsRepository.instance.openAlertsCount();
-      if (mounted) setState(() => _alerts = alerts);
+      if (mounted) {
+        setState(() {
+          _alerts = alerts;
+          _alertsError = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _alertsError = true);
     }

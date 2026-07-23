@@ -8,6 +8,7 @@ abstract class TrackingRepository {
 
   Future<OfficeHours> officeHours();
 
-  /// Activity levels (0..1) for the hero card's bar graph, oldest first.
-  Future<List<double>> todayActivity();
+  /// Activity levels (0..1) for the hero card's bar graph, oldest first —
+  /// visits-per-day over the last 7 days (7 values; last = today).
+  Future<List<double>> weeklyActivity();
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'geolocation_service.dart';
+import 'home_controller.dart';
 import 'l10n/app_localizations.dart';
 import 'models/tracking_models.dart';
 import 'preferences.dart';
@@ -11,7 +12,8 @@ import 'tracking_repository.dart';
 enum _TrackingStatus { on, notRegistered, noPermission, off }
 
 /// Hero card on Home (design screen 04): live tracking status over the brand
-/// spectrum gradient, the office-hours window, and today's activity bars.
+/// spectrum gradient, the office-hours window, and a 7-day activity graph
+/// (visits per day; last bar = today).
 /// Status is re-checked on app resume and on a short poll, since tracking is
 /// app-controlled and can change right after launch (registration gate) or
 /// while backgrounded (OS permission change).
@@ -37,20 +39,39 @@ class _TrackingCardState extends State<TrackingCard>
     GeolocationService.revision.addListener(_refreshStatus);
     _refreshStatus();
     _loadRepositoryData();
+    // Refresh the activity graph when Home reloads (pull / focus / resume).
+    HomeController.instance.addListener(_reloadActivity);
   }
 
   @override
   void dispose() {
+    HomeController.instance.removeListener(_reloadActivity);
     GeolocationService.revision.removeListener(_refreshStatus);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  Future<void> _reloadActivity() async {
+    final activity = await TrackingRepository.instance.weeklyActivity();
+    if (mounted) setState(() => _activity = activity);
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Resume catches permission changes made in OS settings (which change no
     // state here, so [GeolocationService.revision] wouldn't fire).
-    if (state == AppLifecycleState.resumed) _refreshStatus();
+    if (state == AppLifecycleState.resumed) {
+      _refreshStatus();
+      _reloadOfficeHours(); // a day boundary while backgrounded changes "today"
+    }
+  }
+
+  /// Re-derive today's office-hours window (cheap: no network, the schedule is
+  /// cached). Needed because the card loads once but the app can resume the
+  /// next day — the window is per-day.
+  Future<void> _reloadOfficeHours() async {
+    final hours = await TrackingRepository.instance.officeHours();
+    if (mounted) setState(() => _hours = hours);
   }
 
   /// Read-only: reflects tracking state, never changes it. Auto-resume is
@@ -79,7 +100,7 @@ class _TrackingCardState extends State<TrackingCard>
   Future<void> _loadRepositoryData() async {
     final results = await Future.wait([
       TrackingRepository.instance.officeHours(),
-      TrackingRepository.instance.todayActivity(),
+      TrackingRepository.instance.weeklyActivity(),
     ]);
     if (!mounted) return;
     setState(() {
@@ -131,8 +152,10 @@ class _TrackingCardState extends State<TrackingCard>
     };
 
     final window = _hours == null
-        ? '—'
-        : '${ml.formatTimeOfDay(_hours!.start)} – ${ml.formatTimeOfDay(_hours!.end)}';
+        ? '—' // still loading
+        : _hours!.closed
+            ? l.officeHoursClosed
+            : '${ml.formatTimeOfDay(_hours!.start)} – ${ml.formatTimeOfDay(_hours!.end)}';
 
     return Container(
       padding: const EdgeInsets.all(20),

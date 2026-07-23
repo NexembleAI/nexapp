@@ -17,6 +17,12 @@ import 'app_shell.dart';
 import 'customers_repository.dart';
 import 'login_screen.dart';
 import 'mock/mock_repositories.dart'; // TODO(mock): remove with lib/mock/
+import 'crm_name_resolver.dart';
+import 'device_service.dart';
+import 'home_controller.dart';
+import 'nexcore_alerts_repository.dart';
+import 'nexcore_reports_repository.dart';
+import 'nexcore_tracking_repository.dart';
 import 'nexemble_reveal.dart';
 import 'onboarding_screen.dart';
 import 'preferences.dart';
@@ -51,29 +57,37 @@ Future<void> main() async {
   await AuthService.instance.restore();
   // Data-source wiring: each line flips to a real implementation as its
   // backend lands; lib/mock/ is deleted with the last one.
+  // Home is backend-backed via HomeController; the Reports/Alerts TABS still
+  // read the mocks until those tabs are wired, so the real repos wrap the mock
+  // and delegate their tab methods to it.
   final reportsMock = MockReportsRepository();
   final alertsMock = MockAlertsRepository();
-  // A filed report enqueues into the durable upload queue; bump the
-  // today-Reports stat on enqueue. Auto-resolve happens on upload success
-  // (wired to the uploader in a later step), not here.
-  UploadQueue.instance.onEnqueued = (_) => reportsMock.bumpTodayReports();
-  ReportsRepository.instance = reportsMock;
-  AlertsRepository.instance = alertsMock;
-  TrackingRepository.instance = MockTrackingRepository();
+  ReportsRepository.instance = NexcoreReportsRepository(reportsMock);
+  AlertsRepository.instance = NexcoreAlertsRepository(alertsMock);
+  TrackingRepository.instance = NexcoreTrackingRepository();
   CustomersRepository.instance = MockCustomersRepository();
   // Uploader drains the queue while online. The POST is now the real
   // SubmitVisitReport client (multipart to the tracking REST edge); the
   // server-reaction below stays a mock until #13 wires the real repositories.
   UploadUploader.instance.upload = VisitReportClient().submit;
   UploadUploader.instance.onUploaded = (item) {
+    // Keep the (mock) Reports/Alerts tabs consistent, and refresh real Home so
+    // the new report + any auto-resolved alert show once the POST lands.
     reportsMock.addSubmitted(item);
     if (item.leadIds.isNotEmpty) alertsMock.resolveForLeads(item.leadIds);
+    HomeController.instance.refresh();
   };
   UploadUploader.instance.start();
   // A rejected session pauses the drain; resume once signed in again.
   AuthService.instance.authState.addListener(() {
     if (AuthService.instance.authState.value == true) {
       UploadUploader.instance.resume();
+    } else {
+      // Sign-out: drop the previous session's cached data so the next account
+      // (possibly a different user on a shared device) never sees it.
+      HomeController.instance.reset();
+      DeviceService.clearCache();
+      CrmNameResolver.instance.clear();
     }
   });
   runApp(const MainApp());
