@@ -179,10 +179,11 @@ void main() {
       expect(find.text('Office hours'), findsWidgets);
 
       // The "Today's visits" section renders — rows or the empty state, but not
-      // an error. Its title is always present once Home has data.
+      // an error. Its title is always present once Home has data (the widget
+      // renders it upper-cased).
       await _pumpUntil(
         tester,
-        () => find.text("Today's visits").evaluate().isNotEmpty,
+        () => find.text("TODAY'S VISITS").evaluate().isNotEmpty,
         reason: "the Today's visits section",
       );
     },
