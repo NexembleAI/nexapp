@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
+
 import 'connectivity_service.dart';
 import 'models/tracking_models.dart';
 import 'upload_queue.dart';
@@ -19,9 +21,9 @@ class UploadUploader {
   UploadUploader._();
   static final UploadUploader instance = UploadUploader._();
 
-  /// Retry cap ([UploadQueue.maxAttempts]) with [_backoff] gives delays of
-  /// 1,2,4,…,256,300s — roughly a 13-minute window, enough to ride out a deploy
-  /// or a blip before bothering the user.
+  /// Retry cap ([UploadQueue.maxAttempts]) with [backoff] gives base delays of
+  /// 1,2,4,…,256,300s — a ~15-minute window (each jittered to [base/2, base]),
+  /// enough to ride out a deploy or a blip before bothering the user.
   static const Duration _maxBackoff = Duration(minutes: 5);
 
   /// The upload itself, classified. Injected (the real HTTP client in main.dart).
@@ -52,6 +54,20 @@ class UploadUploader {
     _maybeDrain();
   }
 
+  /// Detaches listeners and resets the drain flags so each uploader test starts
+  /// from a known state (the uploader is a process-lifetime singleton). Inert in
+  /// the app — no production code calls it.
+  @visibleForTesting
+  void resetForTest() {
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    _busy = false;
+    _paused = false;
+    _lastProgressPct = -1;
+    ConnectivityService.instance.changes.removeListener(_onChange);
+    UploadQueue.instance.changes.removeListener(_onChange);
+  }
+
   void _onChange() {
     if (ConnectivityService.instance.isOnline) {
       _maybeDrain();
@@ -64,11 +80,20 @@ class UploadUploader {
     }
   }
 
-  /// 1s, 2s, 4s … capped at [_maxBackoff] so a long outage retries every 5
-  /// minutes instead of drifting to hours.
-  static Duration _backoff(int attempt) => Duration(
-        seconds: min(pow(2, attempt - 1).toInt(), _maxBackoff.inSeconds),
-      );
+  static final Random _rng = Random();
+
+  /// Exponential 1, 2, 4, … capped at [_maxBackoff], with **equal jitter**: the
+  /// actual delay is `base/2 + random·base/2`, i.e. uniform in `[base/2, base]`.
+  /// The randomization decorrelates a fleet of clients retrying after a shared
+  /// outage (a deploy, a flaky uplink) so they don't reconnect in lockstep and
+  /// stampede the edge. [rng] is injectable so the backoff is unit-testable.
+  @visibleForTesting
+  static Duration backoff(int attempt, {Random? rng}) {
+    final base = min(pow(2, attempt - 1).toInt(), _maxBackoff.inSeconds);
+    final half = base / 2;
+    final delay = half + (rng ?? _rng).nextDouble() * half; // seconds
+    return Duration(milliseconds: (delay * 1000).round());
+  }
 
   /// Forward real upload progress to the queue, but only when the whole-percent
   /// bucket changes — byte-level ticks fire far more often than the bar (or the
@@ -176,7 +201,7 @@ class UploadUploader {
         // bypassed by an unrelated drain trigger; the wake timer is only an
         // optimization on top of this persisted schedule.
         await UploadQueue.instance
-            .markRetry(id, DateTime.now().add(_backoff(attempt)));
+            .markRetry(id, DateTime.now().add(backoff(attempt)));
         return false;
     }
   }

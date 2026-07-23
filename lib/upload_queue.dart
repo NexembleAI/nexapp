@@ -215,9 +215,25 @@ class UploadQueue {
     if (i >= 0) _items[i] = t(_items[i]);
   }
 
-  Future<void> init() async {
+  /// Closes the DB and drops the in-memory cache so a test can re-[init] a fresh
+  /// (or the same, to simulate a restart) queue without leaking a connection.
+  @visibleForTesting
+  Future<void> closeForTest() async {
+    await _db?.close();
+    _db = null;
+    _audioDir = null;
+    _items.clear();
+  }
+
+  /// [databasesDir]/[documentsDir] default to the platform paths in production;
+  /// tests pass an isolated temp dir to avoid touching real app storage and to
+  /// keep each case independent (no path_provider mock needed).
+  Future<void> init({
+    @visibleForTesting String? databasesDir,
+    @visibleForTesting String? documentsDir,
+  }) async {
     _db = await openDatabase(
-      p.join(await getDatabasesPath(), 'upload_queue.db'),
+      p.join(databasesDir ?? await getDatabasesPath(), 'upload_queue.db'),
       version: 2,
       onCreate: (db, _) => db.execute('''
         CREATE TABLE upload_queue (
@@ -253,8 +269,8 @@ class UploadQueue {
       },
     );
 
-    final docs = await getApplicationDocumentsDirectory();
-    _audioDir = p.join(docs.path, 'queue_audio');
+    final docsPath = documentsDir ?? (await getApplicationDocumentsDirectory()).path;
+    _audioDir = p.join(docsPath, 'queue_audio');
     await Directory(_audioDir!).create(recursive: true);
 
     final rows = await _db!.query('upload_queue', orderBy: 'created_at DESC');
