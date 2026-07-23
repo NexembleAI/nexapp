@@ -78,11 +78,42 @@ class AuthService {
     return _refresh();
   }
 
-  /// Forces a token refresh, ignoring the cached expiry — used after a server
-  /// 401 on a token we still consider locally valid. Returns the new access
-  /// token, or null if the refresh token is dead (in which case [logout] has
-  /// already run and [authState] is now false). See [_refresh].
-  Future<String?> forceRefresh() => _refresh();
+  /// Test-only: injects a session exactly as a successful [login] would, so
+  /// integration tests can bypass the browser OIDC hop (which lives outside
+  /// the Flutter widget tree and cannot be driven by integration_test). The
+  /// caller supplies real tokens (e.g. minted via a Keycloak password grant),
+  /// so everything downstream — registration, uploads — still runs against
+  /// the real backend with real auth.
+  @visibleForTesting
+  Future<void> seedSession({
+    required String access,
+    required String refresh,
+    String? id,
+    DateTime? expiry,
+  }) async {
+    await _store(access: access, refresh: refresh, id: id, expiry: expiry);
+    authState.value = true;
+  }
+
+  /// Forces a token refresh regardless of the cached access token's expiry —
+  /// used after a server-side 401 on a token [accessToken] wouldn't otherwise
+  /// refresh (a rejected or clock-skewed token). Callers: [VisitReportClient]
+  /// (the upload POST) and [TrackingApiClient] (the read GETs). Returns the new
+  /// access token, or null if the refresh token is gone/rejected (in which case
+  /// [logout] has already run and flipped [authState] to false).
+  Future<String?> refreshToken() => _refresh();
+
+  /// Marks the current session as rejected by the server: flips [authState] to
+  /// false so the login screen shows and the upload drain's resume edge fires on
+  /// the next sign-in. Unlike [logout] it makes no network call and leaves the
+  /// stored refresh token for a manual re-login to overwrite.
+  ///
+  /// Closes a latent gap: before P2.1 nothing but [logout] wrote
+  /// `authState = false`, so a server-rejected session could pause the drain
+  /// with no edge to ever resume it.
+  void markSessionRejected() {
+    authState.value = false;
+  }
 
   Future<String?> _refresh() async {
     final refresh = await _storage.read(key: _kRefresh);

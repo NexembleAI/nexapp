@@ -88,20 +88,20 @@ class TrackingApiClient {
         .replace(queryParameters: qp.isEmpty ? null : qp);
   }
 
-  /// Access token, or throw. [force] uses [AuthService.forceRefresh] (post-401);
+  /// Access token, or throw. [force] uses [AuthService.refreshToken] (post-401);
   /// otherwise the normal proactively-refreshing [AuthService.accessToken].
   Future<String> _token({required bool force}) async {
     final String? t;
     try {
       t = await (force
-              ? AuthService.instance.forceRefresh()
+              ? AuthService.instance.refreshToken()
               : AuthService.instance.accessToken())
           .timeout(_authTimeout);
     } on TimeoutException {
       throw const ApiException(ApiErrorKind.retryable, message: 'auth timeout');
     }
     if (t == null) {
-      // accessToken()/forceRefresh() returning null means the session is dead
+      // accessToken()/refreshToken() returning null means the session is dead
       // (logout has run). Genuinely unauthenticated — no point retrying.
       throw const ApiException(ApiErrorKind.unauthenticated,
           message: 'no access token');
