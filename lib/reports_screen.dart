@@ -50,7 +50,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Future<void> _load() async {
     try {
       final reports = await ReportsRepository.instance.reports();
-      if (mounted) setState(() => _reports = reports);
+      // Clear any prior sticky error: this screen lives in an IndexedStack and
+      // never remounts, so one failed load would otherwise show the error state
+      // forever even while later loads succeed.
+      if (mounted) {
+        setState(() {
+          _reports = reports;
+          _error = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _error = true);
     }

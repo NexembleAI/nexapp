@@ -287,6 +287,7 @@
   "editFieldAudio": "Audio re-recorded",
   "transcriptPending": "Transcript pending…",
   "transcriptUnavailable": "Transcript unavailable",
+  "transcriptNoAudio": "No audio recorded",
   "editedTimes": "{count, plural, =1{Edited once} other{Edited {count} times}}",
   "@editedTimes": {
     "placeholders": {

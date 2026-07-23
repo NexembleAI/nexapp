@@ -11,11 +11,16 @@ class LeadSelector extends StatelessWidget {
   final Set<String> selectedIds;
   final void Function(String leadId) onToggle;
 
+  /// When false the tags are display-only (a non-author viewing a report):
+  /// pills don't toggle and the "Add lead" affordance is hidden.
+  final bool enabled;
+
   const LeadSelector({
     super.key,
     required this.leads,
     required this.selectedIds,
     required this.onToggle,
+    this.enabled = true,
   });
 
   @override
@@ -28,9 +33,9 @@ class LeadSelector extends StatelessWidget {
           _LeadPill(
             title: lead.title,
             selected: selectedIds.contains(lead.id),
-            onTap: () => onToggle(lead.id),
+            onTap: enabled ? () => onToggle(lead.id) : null,
           ),
-        _AddLeadChip(onTap: () => _openSheet(context)),
+        if (enabled) _AddLeadChip(onTap: () => _openSheet(context)),
       ],
     );
   }
@@ -50,7 +55,7 @@ class LeadSelector extends StatelessWidget {
 class _LeadPill extends StatelessWidget {
   final String title;
   final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const _LeadPill({
     required this.title,
