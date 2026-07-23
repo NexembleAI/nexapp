@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'audio_player_bar.dart';
-import 'customers_repository.dart';
 import 'l10n/app_localizations.dart';
 import 'lead_selector.dart';
 import 'models/tracking_models.dart';
@@ -22,16 +21,25 @@ class ReportDetailScreen extends StatefulWidget {
 }
 
 class _ReportDetailScreenState extends State<ReportDetailScreen> {
-  static const _sampleAudio = 'assets/audio/sample_note.wav';
+  // Transcript arrives async (submitted -> transcribing -> ready/failed): poll
+  // GetVisitReport while pending, bounded so a stuck transcribe can't poll
+  // forever (§3.4).
+  static const _pollInterval = Duration(seconds: 5);
+  static const _pollCap = Duration(minutes: 2);
 
   ReportDetail? _detail;
-  List<Lead> _customerLeads = const [];
   bool _error = false;
 
   final TextEditingController _notes = TextEditingController();
   final FocusNode _notesFocus = FocusNode();
   Set<String> _selectedLeadIds = {};
   bool _saving = false;
+
+  // A generation counter + a single self-chaining loop (never Timer.periodic):
+  // polls can't overlap, and a delayed response from a superseded generation is
+  // dropped so a stale TRANSCRIBING can't regress a READY transcript/status.
+  int _pollGen = 0;
+  bool _pollActive = false;
 
   @override
   void initState() {
@@ -43,6 +51,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
 
   @override
   void dispose() {
+    _stopPolling();
     _notes.dispose();
     _notesFocus.dispose();
     super.dispose();
@@ -55,20 +64,72 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   Future<void> _load() async {
     try {
       final d = await ReportsRepository.instance.reportDetail(widget.reportId);
-      final leads = await CustomersRepository.instance.leadsForCustomer(
-        d.customerId,
-      );
       if (mounted) {
         setState(() {
           _detail = d;
-          _customerLeads = leads;
           _notes.text = d.notes;
           _selectedLeadIds = {...d.leadIds};
         });
+        _maybeStartPolling();
       }
     } catch (_) {
       if (mounted) setState(() => _error = true);
     }
+  }
+
+  /// Poll the transcript/status while the report is still processing; stop once
+  /// it's terminal (ready / transcript_failed), disposed, or the cap elapses.
+  /// Starts the single self-chaining loop; a no-op while one is already active.
+  void _maybeStartPolling() {
+    final d = _detail;
+    // Only an audio report gains a transcript, so a text-only report is never
+    // "pending" — don't spin the poll for it (it would never resolve).
+    final pending = d != null &&
+        d.audioPresent &&
+        (d.status == ReportStatus.submitted ||
+            d.status == ReportStatus.transcribing);
+    if (!pending) {
+      _stopPolling();
+      return;
+    }
+    if (_pollActive) return;
+    _pollActive = true;
+    // Fire-and-forget: the loop chains its own delays and owns _pollActive.
+    _pollLoop(++_pollGen);
+  }
+
+  /// One poll at a time, bounded by [_pollCap]. Tagged with [gen] so a poll from
+  /// a superseded generation (dispose / a newer start) drops its response before
+  /// touching state — a stale in-flight response can never regress a newer one.
+  Future<void> _pollLoop(int gen) async {
+    final deadline = DateTime.now().add(_pollCap);
+    while (mounted && gen == _pollGen && DateTime.now().isBefore(deadline)) {
+      await Future.delayed(_pollInterval);
+      if (!mounted || gen != _pollGen) break;
+      ReportStatusUpdate upd;
+      try {
+        upd = await ReportsRepository.instance.reportStatus(widget.reportId);
+      } catch (_) {
+        continue; // transient — keep polling until the cap
+      }
+      if (!mounted || gen != _pollGen) break;
+      // Only the volatile bits change — never clobber the user's in-progress
+      // note / lead edits.
+      setState(() =>
+          _detail = _detail?.copyWith(status: upd.status, transcript: upd.transcript));
+      if (upd.status != ReportStatus.submitted &&
+          upd.status != ReportStatus.transcribing) {
+        break;
+      }
+    }
+    if (gen == _pollGen) _pollActive = false;
+  }
+
+  void _stopPolling() {
+    // Bump the generation so any in-flight poll drops its response; the loop's
+    // own guard then exits.
+    _pollGen++;
+    _pollActive = false;
   }
 
   bool get _hasChanges =>
@@ -76,25 +137,47 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       (_notes.text.trim() != _detail!.notes ||
           !_sameLeads(_selectedLeadIds, _detail!.leadIds));
 
+  /// UpdateVisitReport has NO server-side content check (unlike Submit) — an
+  /// empty textBody genuinely clears the column via NULLIF, so an audio-less
+  /// report must not be saveable with empty notes (that would wipe its only
+  /// content). An audio report may clear its notes freely.
+  bool get _canSave =>
+      _hasChanges && (_detail!.audioPresent || _notes.text.trim().isNotEmpty);
+
   static bool _sameLeads(Set<String> a, List<String> b) =>
       a.length == b.toSet().length && a.containsAll(b);
 
   Future<void> _save() async {
-    if (_saving || !_hasChanges) return;
+    if (_saving || !_canSave) return;
     setState(() => _saving = true);
-    await ReportsRepository.instance.updateReport(
-      widget.reportId,
-      notes: _notes.text.trim(),
-      leadIds: _selectedLeadIds.toList(),
-    );
-    final d = await ReportsRepository.instance.reportDetail(widget.reportId);
-    if (!mounted) return;
-    setState(() {
-      _detail = d;
-      _notes.text = d.notes;
-      _selectedLeadIds = {...d.leadIds};
-      _saving = false;
-    });
+    try {
+      await ReportsRepository.instance.updateReport(
+        widget.reportId,
+        notes: _notes.text.trim(),
+        leadIds: _selectedLeadIds.toList(),
+      );
+      final d = await ReportsRepository.instance.reportDetail(widget.reportId);
+      if (!mounted) return;
+      setState(() {
+        _detail = d;
+        _notes.text = d.notes;
+        _selectedLeadIds = {...d.leadIds};
+        _saving = false;
+      });
+      // The refetch may carry a changed status; re-arm the transcript poll off it.
+      _maybeStartPolling();
+    } catch (_) {
+      // The real repo throws on a failed PUT/refetch (the mock never did) —
+      // without this the spinner wedges forever and the exception escapes
+      // unhandled. Release the spinner and offer a retry via a snackbar.
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.reportSubmitFailed),
+        ),
+      );
+    }
   }
 
   Future<void> _confirmClose() async {
@@ -190,6 +273,10 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       );
     }
 
+    // Author-only edit (§3.5): a non-author (e.g. a manager) sees the report
+    // read-only — no editable notes, no lead toggles, no Save bar.
+    final editable = d.editable;
+
     return PopScope(
       canPop: !_hasChanges,
       onPopInvokedWithResult: (didPop, _) {
@@ -226,7 +313,11 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
           padding: const EdgeInsets.all(16),
           children: [
             if (d.audioPresent) ...[
-              const AudioPlayerBar(assetPath: _sampleAudio),
+              AudioPlayerBar(
+                // Streamed on demand — resolves + decodes on first play only.
+                resolve: () =>
+                    ReportsRepository.instance.reportAudio(widget.reportId),
+              ),
               const SizedBox(height: 20),
             ],
             _sectionLabel(context, l.transcriptLabel),
@@ -235,7 +326,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
             _sectionLabel(
               context,
               l.notesLabel,
-              trailing: _notesFocus.hasFocus
+              trailing: (editable && _notesFocus.hasFocus)
                   ? Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -257,6 +348,10 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
             TextField(
               controller: _notes,
               focusNode: _notesFocus,
+              // Lock inputs during a save: the post-save refetch overwrites the
+              // controllers, so an edit made mid round-trip would be silently
+              // discarded.
+              readOnly: !editable || _saving,
               minLines: 3,
               maxLines: null,
               onTapOutside: (_) => _notesFocus.unfocus(),
@@ -277,8 +372,11 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
             const SizedBox(height: 20),
             _sectionLabel(context, l.leadsLabel),
             LeadSelector(
-              leads: _customerLeads,
+              leads: d.leadOptions,
               selectedIds: _selectedLeadIds,
+              // Locked mid-save for the same reason as the notes field: the
+              // refetch overwrites _selectedLeadIds.
+              enabled: editable && !_saving,
               onToggle: (id) => setState(() {
                 _selectedLeadIds.contains(id)
                     ? _selectedLeadIds.remove(id)
@@ -295,34 +393,37 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
             ],
           ],
         ),
-        bottomNavigationBar: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                if (_hasChanges)
-                  Text(
-                    l.unsavedChanges,
-                    style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+        bottomNavigationBar: editable
+            ? SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      if (_hasChanges)
+                        Text(
+                          l.unsavedChanges,
+                          style: TextStyle(
+                              color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                      const Spacer(),
+                      FilledButton(
+                        onPressed: (_canSave && !_saving) ? _save : null,
+                        child: _saving
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(l.saveChangesButton),
+                      ),
+                    ],
                   ),
-                const Spacer(),
-                FilledButton(
-                  onPressed: (_hasChanges && !_saving) ? _save : null,
-                  child: _saving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(l.saveChangesButton),
                 ),
-              ],
-            ),
-          ),
-        ),
+              )
+            : null,
       ),
     );
   }
@@ -333,9 +434,19 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     if (d.transcript != null && d.transcript!.isNotEmpty) {
       return Text(d.transcript!, style: theme.textTheme.bodyMedium);
     }
-    final msg = d.status == ReportStatus.transcriptFailed
-        ? l.transcriptUnavailable
-        : l.transcriptPending;
+    // No transcript text. "Pending" is only honest while an audio report is
+    // still being transcribed — a text-only report has nothing to transcribe,
+    // and a finished (ready/failed) report that produced no text is done, not
+    // pending. Otherwise the message never resolves and misleads the user.
+    final String msg;
+    if (!d.audioPresent) {
+      msg = l.transcriptNoAudio;
+    } else if (d.status == ReportStatus.submitted ||
+        d.status == ReportStatus.transcribing) {
+      msg = l.transcriptPending; // audio present, still processing
+    } else {
+      msg = l.transcriptUnavailable; // failed, or finished with no speech
+    }
     return Text(
       msg,
       style: theme.textTheme.bodyMedium?.copyWith(

@@ -270,6 +270,16 @@ class ReportDetail {
   final int version;
   final List<ReportEdit> edits;
 
+  /// The customer's open leads, for the editable [LeadSelector] on the detail
+  /// screen (real: ListCustomerLeads for the report's customer, merged with any
+  /// currently-tagged lead so a closed-but-tagged lead still renders).
+  final List<Lead> leadOptions;
+
+  /// False when the report isn't the signed-in user's — a manager viewing
+  /// another rep's report gets no edit affordance (the server also 403s a
+  /// cross-author PUT). Defaults true (own report / no identity to check).
+  final bool editable;
+
   const ReportDetail({
     required this.id,
     required this.customerId,
@@ -286,6 +296,8 @@ class ReportDetail {
     required this.leadIds,
     required this.version,
     this.edits = const [],
+    this.leadOptions = const [],
+    this.editable = true,
   });
 
   ReportDetail copyWith({
@@ -293,6 +305,10 @@ class ReportDetail {
     List<String>? leadIds,
     int? version,
     List<ReportEdit>? edits,
+    ReportStatus? status,
+    // Nullable field: an explicit flag distinguishes "leave unchanged" from
+    // "set to null" — a transcript poll can clear a stale transcript.
+    Object? transcript = _unset,
   }) =>
       ReportDetail(
         id: id,
@@ -300,9 +316,10 @@ class ReportDetail {
         customerName: customerName,
         createdAt: createdAt,
         dwell: dwell,
-        status: status,
+        status: status ?? this.status,
         geofencePresent: geofencePresent,
-        transcript: transcript,
+        transcript:
+            identical(transcript, _unset) ? this.transcript : transcript as String?,
         notes: notes ?? this.notes,
         audioPresent: audioPresent,
         audioDurationS: audioDurationS,
@@ -310,7 +327,21 @@ class ReportDetail {
         leadIds: leadIds ?? this.leadIds,
         version: version ?? this.version,
         edits: edits ?? this.edits,
+        leadOptions: leadOptions,
+        editable: editable,
       );
+}
+
+/// Sentinel for [ReportDetail.copyWith]'s nullable `transcript` param.
+const Object _unset = Object();
+
+/// The volatile bits a transcript poll refreshes (GetVisitReport only) — kept
+/// small so the poll doesn't re-resolve names / re-list leads and edits.
+class ReportStatusUpdate {
+  final ReportStatus status;
+  final String? transcript;
+
+  const ReportStatusUpdate({required this.status, this.transcript});
 }
 
 /// One visit row (Home "Today's visits" and the Reports history).

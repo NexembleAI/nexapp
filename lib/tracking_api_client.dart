@@ -62,17 +62,34 @@ class TrackingApiClient {
   /// GETs a tracking endpoint. [path] is relative to the tracking base
   /// (e.g. `'visit/session'`); [query] becomes the query string — a `List`
   /// value renders as repeated params (`?k=a&k=b`, the collectionFormat:multi
-  /// the gateway expects for crm/names). Returns the decoded JSON (a `Map` or
-  /// `List`), or throws [ApiException].
-  Future<Object?> get(String path, {Map<String, dynamic>? query}) async {
-    final uri = _uri(path, query);
-    // First try the current (proactively-refreshed) token; on a 401, force one
-    // refresh and retry, covering a server reject of a locally-valid token.
+  /// the gateway expects for crm/names). [timeout] bounds the send+read for
+  /// this call (defaults to [_requestTimeout]) — the audio GET passes a longer
+  /// bound because a base64 audio body dwarfs the metadata reads. Returns the
+  /// decoded JSON (a `Map` or `List`), or throws [ApiException].
+  Future<Object?> get(String path,
+          {Map<String, dynamic>? query, Duration? timeout}) =>
+      _exchangeWithRetry('GET', _uri(path, query), timeout: timeout);
+
+  /// PUTs [body] (JSON-encoded, `Content-Type: application/json`) to a tracking
+  /// endpoint — the write counterpart to [get], sharing its token/401-retry
+  /// path. [path] is relative to the tracking base; [timeout] bounds the call.
+  /// Returns the decoded JSON on 200, or throws [ApiException].
+  Future<Object?> put(String path,
+          {Map<String, dynamic>? body, Duration? timeout}) =>
+      _exchangeWithRetry('PUT', _uri(path, null), body: body, timeout: timeout);
+
+  /// Runs one request with the current (proactively-refreshed) token; on a 401,
+  /// forces one refresh and retries, covering a server reject of a
+  /// locally-valid token. Shared by [get]/[put] so both get the same retry.
+  Future<Object?> _exchangeWithRetry(String method, Uri uri,
+      {Map<String, dynamic>? body, Duration? timeout}) async {
     try {
-      return await _send(uri, await _token(force: false));
+      return await _send(method, uri, await _token(force: false),
+          body: body, timeout: timeout);
     } on ApiException catch (e) {
       if (e.kind != ApiErrorKind.unauthenticated) rethrow;
-      return await _send(uri, await _token(force: true));
+      return await _send(method, uri, await _token(force: true),
+          body: body, timeout: timeout);
     }
   }
 
@@ -109,10 +126,12 @@ class TrackingApiClient {
     return t;
   }
 
-  Future<Object?> _send(Uri uri, String token) async {
+  Future<Object?> _send(String method, Uri uri, String token,
+      {Map<String, dynamic>? body, Duration? timeout}) async {
     final client = await _httpClient();
     try {
-      return await _exchange(client, uri, token).timeout(_requestTimeout);
+      return await _exchange(client, method, uri, token, body)
+          .timeout(timeout ?? _requestTimeout);
     } on SocketException catch (e) {
       throw ApiException(ApiErrorKind.retryable, message: 'network: ${e.message}');
     } on HttpException catch (e) {
@@ -124,9 +143,15 @@ class TrackingApiClient {
     }
   }
 
-  Future<Object?> _exchange(HttpClient client, Uri uri, String token) async {
-    final request = await client.getUrl(uri);
+  Future<Object?> _exchange(HttpClient client, String method, Uri uri,
+      String token, Map<String, dynamic>? body) async {
+    final request = await client.openUrl(method, uri);
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    if (body != null) {
+      // Send a JSON body (writes UTF-8 via the request's default encoding).
+      request.headers.contentType = ContentType('application', 'json');
+      request.write(jsonEncode(body));
+    }
     final response = await request.close();
     final text = await response.transform(utf8.decoder).join();
     if (response.statusCode == 200) {

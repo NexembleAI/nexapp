@@ -156,6 +156,15 @@ class MockReportsRepository implements ReportsRepository {
   }
 
   @override
+  Future<ReportStatusUpdate> reportStatus(String id) async {
+    final r = await reportDetail(id);
+    return ReportStatusUpdate(status: r.status, transcript: r.transcript);
+  }
+
+  @override
+  Future<String?> reportAudio(String id) async => null;
+
+  @override
   Future<void> updateReport(
     String id, {
     required String notes,
