@@ -574,7 +574,7 @@ class OfficeHours {
   ///                       (authoritative: missing day == closed, like the gate).
   ///   • a window        — today's earliest start … latest end (collapses a
   ///                       multi-window day, e.g. a lunch split).
-  static OfficeHours? tryFromDeviceJson(String? json) {
+  static OfficeHours? tryFromDeviceJson(String? json, {DateTime? now}) {
     if (json == null) return null;
     final s = json.trim();
     if (s.isEmpty || s == '{}' || s == 'null') return null;
@@ -588,9 +588,10 @@ class OfficeHours {
     final sched = decoded['weekly_schedule'];
     if (sched is! Map || sched.isEmpty) return null; // no schedule → default
 
-    // Schedule IS configured → authoritative. Today's key decides.
+    // Schedule IS configured → authoritative. Today's key decides. [now] is
+    // injectable for tests; production reads the wall clock.
     const keys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-    final windows = sched[keys[DateTime.now().weekday - 1]]; // Mon=1..Sun=7
+    final windows = sched[keys[(now ?? DateTime.now()).weekday - 1]]; // Mon=1
     if (windows is! List || windows.isEmpty) return closedToday; // empty/unlisted
 
     int? minStart, maxEnd; // minutes since midnight

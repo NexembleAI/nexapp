@@ -156,15 +156,19 @@ class HomeController extends ChangeNotifier {
 
   /// Visits-per-day over the last 7 days, normalized 0..1 against the rolling
   /// 7-day max; oldest→newest, last bucket = today. All-zero week → flat zeros.
-  List<double> get weeklyActivity {
-    final now = DateTime.now();
+  List<double> get weeklyActivity =>
+      weeklyBuckets(_sessions.map((s) => s.enteredAt), DateTime.now());
+
+  /// Pure: visits-per-day over the 7 days ending on [now]'s local day,
+  /// normalized 0..1 against the rolling max (oldest→newest, last = today).
+  /// All-zero week → flat zeros. Extracted static so it's unit-testable.
+  static List<double> weeklyBuckets(Iterable<DateTime?> enteredAts, DateTime now) {
     // UTC midnights from the LOCAL calendar date, so the day delta is exact:
     // a plain local difference().inDays truncates a 23-hour DST day to 0 and
     // mis-buckets by one. Dates are already local (Wire.timestamp .toLocal()).
     final today = DateTime.utc(now.year, now.month, now.day);
     final counts = List<int>.filled(7, 0);
-    for (final s in _sessions) {
-      final e = s.enteredAt;
+    for (final e in enteredAts) {
       if (e == null) continue;
       final days = today.difference(DateTime.utc(e.year, e.month, e.day)).inDays;
       if (days >= 0 && days < 7) counts[6 - days]++; // index 6 = today
