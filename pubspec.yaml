@@ -43,6 +43,10 @@ dev_dependencies:
   # In-process sqflite (FFI) so the durable upload queue's DB tests run on the
   # host VM without a device. Test-only: the app keeps the native `sqflite`.
   sqflite_common_ffi: ^2.3.3
+  # Platform-interface fakes for the recorder tests (mock the `record` plugin +
+  # path_provider without a device). Test-only.
+  plugin_platform_interface: ^2.1.8
+  path_provider_platform_interface: ^2.1.3
 
 flutter:
   uses-material-design: true
