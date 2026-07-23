@@ -32,6 +32,9 @@ abstract class VisitReportTransport {
     required Map<String, dynamic> metadata,
     String? audioFilePath,
     String? audioMime,
+    // Fires as the request body is written, sent/total in bytes. Optional — the
+    // classification path never needs it.
+    void Function(int sent, int total)? onProgress,
   });
 }
 
@@ -58,11 +61,13 @@ class HttpMultipartVisitReportTransport implements VisitReportTransport {
     required Map<String, dynamic> metadata,
     String? audioFilePath,
     String? audioMime,
+    void Function(int sent, int total)? onProgress,
   }) async {
     final client = await _httpClient();
     try {
-      return await _send(client, uri, token, metadata, audioFilePath, audioMime)
-          .timeout(_totalTimeout);
+      return await _send(
+        client, uri, token, metadata, audioFilePath, audioMime, onProgress,
+      ).timeout(_totalTimeout);
     } finally {
       client.close(force: true);
     }
@@ -75,6 +80,7 @@ class HttpMultipartVisitReportTransport implements VisitReportTransport {
     Map<String, dynamic> metadata,
     String? audioFilePath,
     String? audioMime,
+    void Function(int sent, int total)? onProgress,
   ) async {
     final boundary = _newBoundary();
     final request = await client.postUrl(uri);
@@ -116,14 +122,31 @@ class HttpMultipartVisitReportTransport implements VisitReportTransport {
     // read once above; the queue's audio file is immutable after enqueue, so it
     // can't desync the stream (and dart:io errors rather than corrupting if it
     // ever did -> retryable).
-    request.contentLength = head.length + audioHeader.length + audioLen + tail.length;
+    final total = head.length + audioHeader.length + audioLen + tail.length;
+    request.contentLength = total;
+
+    // Report bytes as they're handed to the request sink. The audio stream is
+    // the bulk, so mapping openRead() gives real incremental progress; the
+    // head/header/tail are tiny. This is sink-level (dart:io doesn't expose the
+    // wire flush), which is close enough to drive a progress bar.
+    var sent = 0;
+    void bump(int n) {
+      sent += n;
+      onProgress?.call(sent, total);
+    }
 
     request.add(head);
+    bump(head.length);
     if (audioFile != null) {
       request.add(audioHeader);
-      await request.addStream(audioFile.openRead());
+      bump(audioHeader.length);
+      await request.addStream(audioFile.openRead().map((chunk) {
+        bump(chunk.length);
+        return chunk;
+      }));
     }
     request.add(tail);
+    bump(tail.length);
 
     final response = await request.close();
     final body = await response.transform(utf8.decoder).join();
@@ -204,7 +227,10 @@ class VisitReportClient {
 
   /// Submits one queued report and returns its classified outcome. Wire as
   /// `UploadUploader.instance.upload = VisitReportClient().submit`.
-  Future<UploadOutcome> submit(QueuedReport item) async {
+  Future<UploadOutcome> submit(
+    QueuedReport item, {
+    void Function(double fraction)? onProgress,
+  }) async {
     final token = await _accessToken();
     if (token == null) {
       // No usable session at all. Make sure a resume edge exists (see below) and
@@ -214,7 +240,7 @@ class VisitReportClient {
       return UploadOutcome.unauthenticated;
     }
 
-    final first = await _attempt(item, token);
+    final first = await _attempt(item, token, onProgress);
     if (first != UploadOutcome.unauthenticated) return first;
 
     // 401: the token was rejected server-side (revoked or clock-skewed — a plain
@@ -229,7 +255,7 @@ class VisitReportClient {
       return UploadOutcome.unauthenticated;
     }
 
-    final second = await _attempt(item, refreshed);
+    final second = await _attempt(item, refreshed, onProgress);
     if (second == UploadOutcome.unauthenticated) {
       // Still 401 with a fresh token: the session itself is dead. Nothing else
       // writes authState=false on a server-side rejection, so flip it here — the
@@ -243,7 +269,11 @@ class VisitReportClient {
 
   /// A single POST + classify. Catches the transport exceptions the policy maps
   /// to retryable, so [submit] never throws for a network blip.
-  Future<UploadOutcome> _attempt(QueuedReport item, String token) async {
+  Future<UploadOutcome> _attempt(
+    QueuedReport item,
+    String token,
+    void Function(double fraction)? onProgress,
+  ) async {
     final metadata = buildMetadata(item);
     final audioPath = item.audioPath != null ? _audioPathResolver(item) : null;
     try {
@@ -253,6 +283,8 @@ class VisitReportClient {
         metadata: metadata,
         audioFilePath: audioPath,
         audioMime: item.audioMime,
+        onProgress: (sent, total) =>
+            onProgress?.call(total == 0 ? 0 : sent / total),
       );
       final outcome = _classify(status, body);
       reportDebugLog('HTTP $status -> ${outcome.name}');

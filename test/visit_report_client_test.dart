@@ -28,6 +28,7 @@ class _FakeTransport implements VisitReportTransport {
     required Map<String, dynamic> metadata,
     String? audioFilePath,
     String? audioMime,
+    void Function(int sent, int total)? onProgress,
   }) async {
     tokens.add(token);
     this.metadata.add(metadata);

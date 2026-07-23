@@ -295,7 +295,15 @@ class _QueueRow extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(3),
               child: LinearProgressIndicator(
-                value: item.progress,
+                // Indeterminate (a self-animating barber-pole) rather than a
+                // determinate value in two cases: a text-only report, whose body
+                // is a few hundred bytes and would just flash 0->100; and the
+                // tail after the bytes are sent, while we await the server's
+                // response — a determinate bar would sit full-but-not-done and
+                // read as hung. Determinate only while audio bytes are streaming.
+                value: (!item.hasAudio || item.progress >= 1.0)
+                    ? null
+                    : item.progress,
                 minHeight: 4,
               ),
             ),
