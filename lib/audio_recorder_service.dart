@@ -33,8 +33,16 @@ class AudioRecorderService {
     return await f.exists() ? f.length() : 0;
   }
 
-  static (RecordConfig, String ext, String mime) _configFor() {
-    if (Platform.isIOS) {
+  static (RecordConfig, String ext, String mime) _configFor() =>
+      configFor(isIOS: Platform.isIOS);
+
+  /// Recording config per platform: Opus/Ogg ~16 kbps mono on Android, AAC-LC/
+  /// m4a ~32 kbps mono on iOS (iOS can't mux Opus into Ogg). [isIOS] is a
+  /// parameter so both branches are deterministically unit-testable.
+  @visibleForTesting
+  static (RecordConfig, String ext, String mime) configFor(
+      {required bool isIOS}) {
+    if (isIOS) {
       return (
         const RecordConfig(
           encoder: AudioEncoder.aacLc,

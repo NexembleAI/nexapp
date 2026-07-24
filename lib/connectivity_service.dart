@@ -34,6 +34,17 @@ class ConnectivityService {
       }
     });
   }
+
+  /// Drives the online/offline state from a test (the real source is a platform
+  /// probe with no injectable stream). Inert in the app — no production code
+  /// calls it; [_online] is otherwise set only by [init]'s subscription.
+  @visibleForTesting
+  void setOnlineForTest(bool value) {
+    if (value != _online) {
+      _online = value;
+      _changes.bump();
+    }
+  }
 }
 
 class _ConnChanges extends ChangeNotifier {

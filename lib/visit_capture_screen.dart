@@ -387,7 +387,7 @@ class _VisitCaptureScreenState extends State<VisitCaptureScreen> {
                 ),
               ],
               const SizedBox(height: 20),
-              _RecorderCard(
+              RecorderCard(
                 // Stable key: the leads section inserts above this card when a
                 // customer is picked, shifting its position — without a key
                 // Flutter would rebuild it by index and lose the recording.
@@ -675,7 +675,8 @@ enum _RecState { idle, recording, reviewing }
 /// Three-state voice-note recorder (design screen 05). Owns the timer, the
 /// amplitude subscription, and a 5-min cap; the parent owns the service and
 /// the resulting audio (for submit / discard).
-class _RecorderCard extends StatefulWidget {
+@visibleForTesting
+class RecorderCard extends StatefulWidget {
   final AudioRecorderService service;
   final ValueChanged<ReportAudio?> onChanged;
 
@@ -683,7 +684,7 @@ class _RecorderCard extends StatefulWidget {
   /// unsaved (discard warning) and block submit.
   final ValueChanged<bool> onRecordingChanged;
 
-  const _RecorderCard({
+  const RecorderCard({
     super.key,
     required this.service,
     required this.onChanged,
@@ -691,10 +692,10 @@ class _RecorderCard extends StatefulWidget {
   });
 
   @override
-  State<_RecorderCard> createState() => _RecorderCardState();
+  State<RecorderCard> createState() => _RecorderCardState();
 }
 
-class _RecorderCardState extends State<_RecorderCard> {
+class _RecorderCardState extends State<RecorderCard> {
   // Caps worst-case file size under the §4.4 10 MB ingest cap even at the
   // inflated iOS-simulator bitrate (~130 kbps -> ~4.8 MB at 5 min).
   static const _maxDuration = Duration(minutes: 5);
@@ -931,7 +932,8 @@ class _RecorderCardState extends State<_RecorderCard> {
     final theme = Theme.of(context);
     return Column(
       children: [
-        _circleButton(icon: Icons.mic, onTap: _start),
+        _circleButton(
+            icon: Icons.mic, label: l.recordButtonA11y, onTap: _start),
         const SizedBox(height: 12),
         Text(
           l.tapToRecord,
@@ -984,7 +986,8 @@ class _RecorderCardState extends State<_RecorderCard> {
         const SizedBox(height: 16),
         _Waveform(levels: _levels),
         const SizedBox(height: 16),
-        _circleButton(icon: Icons.stop, onTap: _stop),
+        _circleButton(
+            icon: Icons.stop, label: l.stopRecordingButtonA11y, onTap: _stop),
         const SizedBox(height: 10),
         Text(
           '${widget.service.codecLabel} · ${_fmtBytes(_sizeBytes)}',
@@ -1006,18 +1009,25 @@ class _RecorderCardState extends State<_RecorderCard> {
       children: [
         Row(
           children: [
-            GestureDetector(
-              onTap: _togglePlay,
-              child: Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: theme.colorScheme.primary,
-                ),
-                child: Icon(
-                  _playing ? Icons.pause : Icons.play_arrow,
-                  color: Colors.white,
+            MergeSemantics(
+              child: Semantics(
+                button: true,
+                label:
+                    _playing ? l.pauseAudioButtonA11y : l.playAudioButtonA11y,
+                child: GestureDetector(
+                  onTap: _togglePlay,
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: theme.colorScheme.primary,
+                    ),
+                    child: Icon(
+                      _playing ? Icons.pause : Icons.play_arrow,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1073,17 +1083,31 @@ class _RecorderCardState extends State<_RecorderCard> {
     );
   }
 
-  Widget _circleButton({required IconData icon, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 72,
-        height: 72,
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          color: AppTheme.recording,
+  Widget _circleButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    // Icon-only control: give the semantics tree a name so screen readers and
+    // uiautomator can find "Record"/"Stop" (the glyph is invisible to them).
+    // MergeSemantics folds the label onto the tappable node → one "Record,
+    // button" announcement rather than a nameless button beside a label.
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        label: label,
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            width: 72,
+            height: 72,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppTheme.recording,
+            ),
+            child: Icon(icon, color: Colors.white, size: 30),
+          ),
         ),
-        child: Icon(icon, color: Colors.white, size: 30),
       ),
     );
   }

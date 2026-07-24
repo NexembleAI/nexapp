@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
+
 import 'connectivity_service.dart';
 import 'models/tracking_models.dart';
 import 'upload_queue.dart';
@@ -12,20 +14,24 @@ import 'upload_queue.dart';
 /// item.
 enum UploadOutcome { success, retryable, terminal, unauthenticated }
 
-/// Drains the durable queue while online, one item at a time. Real client
-/// service; the POST and the server's success-reaction are injected
-/// (simulated now, real when POST /visit/report exists).
+/// Drains the durable queue while online, one item at a time. The POST and the
+/// server's success-reaction are injected: [upload] is wired to the real
+/// [VisitReportClient] in main.dart, [onUploaded] to the local repos.
 class UploadUploader {
   UploadUploader._();
   static final UploadUploader instance = UploadUploader._();
 
-  /// Retry cap ([UploadQueue.maxAttempts]) with [_backoff] gives delays of
-  /// 1,2,4,…,256,300s — roughly a 13-minute window, enough to ride out a deploy
-  /// or a blip before bothering the user.
+  /// Retry cap ([UploadQueue.maxAttempts]) with [backoff] gives base delays of
+  /// 1,2,4,…,256,300s — a ~15-minute window (each jittered to [base/2, base]),
+  /// enough to ride out a deploy or a blip before bothering the user.
   static const Duration _maxBackoff = Duration(minutes: 5);
 
-  /// The upload itself, classified. Injected; real HTTP later.
-  Future<UploadOutcome> Function(QueuedReport)? upload;
+  /// The upload itself, classified. Injected (the real HTTP client in main.dart).
+  /// [onProgress] reports fractional upload progress (0..1) for the live bar.
+  Future<UploadOutcome> Function(
+    QueuedReport, {
+    void Function(double fraction)? onProgress,
+  })? upload;
 
   /// The server's reaction on success (persist in history + auto-resolve
   /// alerts). The real backend does this server-side and pushes it back.
@@ -34,6 +40,7 @@ class UploadUploader {
   bool _busy = false;
   bool _paused = false; // set on unauthenticated; cleared by resume()
   Timer? _retryTimer;
+  int _lastProgressPct = -1; // last whole-percent forwarded for the live item
 
   void start() {
     ConnectivityService.instance.changes.addListener(_onChange);
@@ -45,6 +52,20 @@ class UploadUploader {
   void resume() {
     _paused = false;
     _maybeDrain();
+  }
+
+  /// Detaches listeners and resets the drain flags so each uploader test starts
+  /// from a known state (the uploader is a process-lifetime singleton). Inert in
+  /// the app — no production code calls it.
+  @visibleForTesting
+  void resetForTest() {
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    _busy = false;
+    _paused = false;
+    _lastProgressPct = -1;
+    ConnectivityService.instance.changes.removeListener(_onChange);
+    UploadQueue.instance.changes.removeListener(_onChange);
   }
 
   void _onChange() {
@@ -59,11 +80,31 @@ class UploadUploader {
     }
   }
 
-  /// 1s, 2s, 4s … capped at [_maxBackoff] so a long outage retries every 5
-  /// minutes instead of drifting to hours.
-  static Duration _backoff(int attempt) => Duration(
-        seconds: min(pow(2, attempt - 1).toInt(), _maxBackoff.inSeconds),
-      );
+  static final Random _rng = Random();
+
+  /// Exponential 1, 2, 4, … capped at [_maxBackoff], with **equal jitter**: the
+  /// actual delay is `base/2 + random·base/2`, i.e. uniform in `[base/2, base]`.
+  /// The randomization decorrelates a fleet of clients retrying after a shared
+  /// outage (a deploy, a flaky uplink) so they don't reconnect in lockstep and
+  /// stampede the edge. [rng] is injectable so the backoff is unit-testable.
+  @visibleForTesting
+  static Duration backoff(int attempt, {Random? rng}) {
+    final base = min(pow(2, attempt - 1).toInt(), _maxBackoff.inSeconds);
+    final half = base / 2;
+    final delay = half + (rng ?? _rng).nextDouble() * half; // seconds
+    return Duration(milliseconds: (delay * 1000).round());
+  }
+
+  /// Forward real upload progress to the queue, but only when the whole-percent
+  /// bucket changes — byte-level ticks fire far more often than the bar (or the
+  /// progressChanges notifier) needs. The drain is serial, so a single scalar
+  /// tracks the one in-flight item; [_upload] resets it per attempt.
+  void _reportProgress(String id, double fraction) {
+    final pct = (fraction * 100).clamp(0, 100).floor();
+    if (pct == _lastProgressPct) return;
+    _lastProgressPct = pct;
+    UploadQueue.instance.setProgress(id, pct / 100);
+  }
 
   /// A single timer that wakes the drain when the soonest backing-off item
   /// becomes due. Replaces a per-failure timer, so the backoff is driven by the
@@ -112,22 +153,16 @@ class UploadUploader {
   /// and leave correctness resting on the server deduping idempotency_key.
   Future<bool> _upload(QueuedReport item) async {
     final id = item.idempotencyKey;
+    _lastProgressPct = -1; // fresh per attempt (the drain is serial)
     await UploadQueue.instance.markUploading(id);
-
-    // Simulated progress; the real HTTP upload will report its own. Breaking
-    // early when offline is cosmetic (stop the bar) — the outcome below still
-    // decides the item's fate.
-    const steps = 20;
-    for (var i = 1; i <= steps; i++) {
-      await Future.delayed(const Duration(milliseconds: 200));
-      if (!ConnectivityService.instance.isOnline) break;
-      UploadQueue.instance.setProgress(id, i / steps);
-    }
 
     UploadOutcome outcome;
     try {
-      outcome =
-          await (upload?.call(item) ?? Future.value(UploadOutcome.success));
+      outcome = await (upload?.call(
+            item,
+            onProgress: (f) => _reportProgress(id, f),
+          ) ??
+          Future.value(UploadOutcome.success));
     } catch (_) {
       // A real HTTP client throws (SocketException/TimeoutException) for exactly
       // the transient failures the policy treats as retryable — so a thrown hook
@@ -166,7 +201,7 @@ class UploadUploader {
         // bypassed by an unrelated drain trigger; the wake timer is only an
         // optimization on top of this persisted schedule.
         await UploadQueue.instance
-            .markRetry(id, DateTime.now().add(_backoff(attempt)));
+            .markRetry(id, DateTime.now().add(backoff(attempt)));
         return false;
     }
   }
